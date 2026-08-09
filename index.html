@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bangumi Staff Analyzer · 制作人员分析</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f36ca6'/%3E%3Ctext x='16' y='22' font-size='18' font-weight='bold' text-anchor='middle' fill='white' font-family='sans-serif'%3ES%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="logo">S</span>
+        <div class="brand-text">
+          <h1>Staff Analyzer</h1>
+          <p>Bangumi 制作人员分析</p>
+        </div>
+      </div>
+      <nav id="nav">
+        <a href="#/home" data-route="home">首页 / 搜索</a>
+        <a href="#/compare" data-route="compare">作品重叠度对比</a>
+        <a href="#/collections" data-route="collections">我的分类收集</a>
+      </nav>
+      <div class="sidebar-foot">
+        <button id="btn-settings" class="linklike" type="button">设置</button>
+        <span class="ver">v1.0.0</span>
+      </div>
+    </aside>
+    <main id="main">
+      <div id="view"></div>
+    </main>
+  </div>
+  <div id="toast-root"></div>
+  <div id="modal-root"></div>
+
+  <script src="js/config.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/views/home.js"></script>
+  <script src="js/views/analysis.js"></script>
+  <script src="js/views/compare.js"></script>
+  <script src="js/views/collections.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
