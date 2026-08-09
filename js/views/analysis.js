@@ -249,14 +249,17 @@
       return box;
     }
 
-    /* 聚合：按 personId 合并 */
+    /* 聚合：按 personId 合并
+     * count：出现在多少部作品（去重）
+     * relWork：{职务 -> 担任该职务的作品数}
+     */
     function aggregate(results, works, excludeId) {
       const map = new Map();
       results.forEach(function (r, i) {
         if (!r.ok) return;
         const work = works[i];
         const staffList = r.data || [];
-        const perWork = new Map(); // personId -> Set(relations)
+        const perWork = new Map(); // personId -> Set(relations)（同一作品内按人合并职务）
         staffList.forEach(function (s) {
           if (excludeId && String(s.id) === String(excludeId)) return;
           if (!perWork.has(s.id)) perWork.set(s.id, new Set());
@@ -268,12 +271,15 @@
           if (!entry) {
             entry = {
               id: pid, name: s.name, type: s.type, career: s.career || [],
-              count: 0, relations: new Set(), works: []
+              count: 0, relWork: {}, relations: new Set(), works: []
             };
             map.set(pid, entry);
           }
           entry.count++;
-          relations.forEach(function (rel) { entry.relations.add(rel); });
+          relations.forEach(function (rel) {
+            entry.relations.add(rel);
+            entry.relWork[rel] = (entry.relWork[rel] || 0) + 1;
+          });
           entry.works.push({ subjectId: work.id, subjectName: displayName(work), relation: Array.from(relations).join('、') });
         });
       });
@@ -287,7 +293,6 @@
         return;
       }
       const totalWorks = works.length;
-      const maxCount = agg.reduce(function (m, a) { return Math.max(m, a.count); }, 1);
       let typeFilter = 'all'; // all / person / company
       let sortKey = 'count';
       let sortDesc = true;
@@ -386,28 +391,37 @@
       renderRelChips();
       renderRelActions();
 
+      function isRelActive() { return relList.some(function (r) { return relState[r]; }); }
+      // 命中职务的次数：所选职务在该人身上的作品数之和
+      function roleCountFor(a) {
+        let total = 0;
+        Object.keys(a.relWork || {}).forEach(function (rel) {
+          if (relState[rel]) total += a.relWork[rel];
+        });
+        return total;
+      }
       function filtered() {
         let list = agg.slice();
         if (typeFilter === 'person') list = list.filter(function (a) { return a.type !== 2; });
         if (typeFilter === 'company') list = list.filter(function (a) { return a.type === 2; });
-        if (!relList.length) return list;
-        const sel = relList.filter(function (r) { return relState[r]; });
-        if (!sel.length) return list; // 未选择任何职务 → 显示全部
-        return list.filter(function (a) {
-          return Array.from(a.relations).some(function (r) { return relState[r]; });
-        });
+        if (!relList.length || !isRelActive()) return list; // 未选择任何职务 → 显示全部
+        return list.filter(function (a) { return roleCountFor(a) > 0; });
       }
-      // 职务列：有筛选时只显示命中的职务
+      // 职务列：带次数，有筛选时只显示命中的职务
       function relBadges(a) {
-        const active = relList.some(function (r) { return relState[r]; });
+        const active = isRelActive();
         const rels = active ? Array.from(a.relations).filter(function (r) { return relState[r]; }) : Array.from(a.relations);
-        return rels.slice(0, 4).map(function (r) { return Staff.ui.roleBadge(r); }).join(' ');
+        const sorted = rels.slice().sort(function (x, y) { return (a.relWork[y] || 0) - (a.relWork[x] || 0); });
+        return sorted.slice(0, 4).map(function (r) {
+          return '<span class="badge-role">' + Staff.ui.escapeHtml(r) + '×' + (a.relWork[r] || 0) + '</span>';
+        }).join(' ');
       }
       function draw() {
+        const relActive = isRelActive();
         let list = filtered();
         list.sort(function (a, b) {
           let r = 0;
-          if (sortKey === 'count') r = a.count - b.count;
+          if (sortKey === 'count') r = (relActive ? roleCountFor(a) : a.count) - (relActive ? roleCountFor(b) : b.count);
           else if (sortKey === 'name') r = (a.name || '').localeCompare(b.name || '', 'zh');
           if (r === 0) r = (a.name || '').localeCompare(b.name || '', 'zh');
           return sortDesc ? -r : r;
@@ -417,23 +431,25 @@
           target.innerHTML = '<div class="empty-box">当前筛选下没有匹配的 staff，试试调整上面的类型或职务筛选</div>';
           return;
         }
+        const maxVal = list.reduce(function (m, a) { return Math.max(m, relActive ? roleCountFor(a) : a.count); }, 1);
         const headers = [
           { key: 'rank', label: '#', sortable: false, num: true },
           { key: 'name', label: 'Staff', sortable: true },
           { key: 'type', label: '类型', sortable: false },
-          { key: 'count', label: '出现次数', sortable: true, num: true },
+          { key: 'count', label: relActive ? '职务次数' : '出现次数', sortable: true, num: true },
           { key: 'wn', label: '职务', sortable: false },
           { key: 'op', label: '操作', sortable: false }
         ];
         const rows = list.map(function (a) {
-          const pct = Math.round(a.count / maxCount * 100);
+          const val = relActive ? roleCountFor(a) : a.count;
+          const pct = Math.round(val / maxVal * 100);
           return {
             cells: {
               rank: list.indexOf(a) + 1,
               name: '<div class="row" style="gap:8px;flex-wrap:nowrap"><a href="https://bgm.tv/person/' + a.id + '" target="_blank" rel="noopener">' + Staff.ui.escapeHtml(a.name) + '</a>' +
                 '  <div class="bar-cell" style="flex:1;min-width:80px"><div class="bar-bg"><div class="bar-fill" style="width:' + pct + '%"></div></div></div></div>',
               type: Staff.ui.typeBadge(a.type),
-              count: '<strong>' + a.count + '</strong> 部',
+              count: '<strong>' + val + '</strong> ' + (relActive ? '次' : '部'),
               wn: relBadges(a),
               op: '<button class="btn small" data-collect="' + a.id + '">收集</button>'
             },

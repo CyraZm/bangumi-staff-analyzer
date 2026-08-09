@@ -90,9 +90,31 @@
     }
   }
 
+  // 按人聚合：同一部作品内一个人的多个职务合并为 relations 集合（避免重复计数）
+  function groupPersons(list) {
+    const map = new Map();
+    (list || []).forEach(function (p) {
+      let g = map.get(p.id);
+      if (!g) {
+        g = { id: p.id, name: p.name, type: p.type, relations: new Set() };
+        map.set(p.id, g);
+      }
+      if (p.relation) g.relations.add(p.relation);
+    });
+    return map;
+  }
+
   function personCount(list) {
     const persons = list.filter(function (p) { return p.type !== 2; }).length;
     return { total: list.length, persons: persons, companies: list.length - persons };
+  }
+
+  // 职务徽章（多个职务合并显示）
+  function relBadges(g) {
+    if (!g) return '<span class="muted small">—</span>';
+    const rels = Array.from(g.relations || []);
+    if (!rels.length) return '<span class="muted small">—</span>';
+    return rels.map(function (r) { return Staff.ui.roleBadge(r); }).join(' ');
   }
 
   function renderResult() {
@@ -102,29 +124,32 @@
 
     if (!a || !b) {
       const one = a || b;
-      const c = personCount(one.persons);
+      const uniq = Array.from(groupPersons(one.persons).values());
+      const c = personCount(uniq);
       root.innerHTML =
         '<div class="card"><h3>' + Staff.ui.escapeHtml(one.name) + ' · 制作人员</h3>' +
         '<div class="small muted">共 ' + c.total + ' 名（个人 ' + c.persons + '，公司 ' + c.companies + '）</div>' +
-        personList(one.persons, 15) +
+        personList(uniq, 15) +
         '</div>';
       return;
     }
 
-    const ca = personCount(a.persons), cb = personCount(b.persons);
-    const byIdA = new Map(a.persons.map(function (p) { return [p.id, p]; }));
-    const byIdB = new Map(b.persons.map(function (p) { return [p.id, p]; }));
-    const overlap = a.persons.filter(function (p) { return byIdB.has(p.id); });
-    const onlyA = a.persons.filter(function (p) { return !byIdB.has(p.id); });
-    const onlyB = b.persons.filter(function (p) { return !byIdA.has(p.id); });
+    const mapA = groupPersons(a.persons);
+    const mapB = groupPersons(b.persons);
+    const uniqA = Array.from(mapA.values());
+    const uniqB = Array.from(mapB.values());
+    const ca = personCount(uniqA), cb = personCount(uniqB);
+    const overlap = uniqA.filter(function (p) { return mapB.has(p.id); });
+    const onlyA = uniqA.filter(function (p) { return !mapB.has(p.id); });
+    const onlyB = uniqB.filter(function (p) { return !mapA.has(p.id); });
 
     const cards =
       '<div class="card"><h3>' + Staff.ui.escapeHtml(a.name) + ' <span class="muted small" style="font-weight:400">作品 A</span></h3>' +
       '<div class="small muted">共 ' + ca.total + ' 名（个人 ' + ca.persons + '，公司 ' + ca.companies + '）</div>' +
-      personList(a.persons, 8) + '</div>' +
+      personList(uniqA, 8) + '</div>' +
       '<div class="card"><h3>' + Staff.ui.escapeHtml(b.name) + ' <span class="muted small" style="font-weight:400">作品 B</span></h3>' +
       '<div class="small muted">共 ' + cb.total + ' 名（个人 ' + cb.persons + '，公司 ' + cb.companies + '）</div>' +
-      personList(b.persons, 8) + '</div>';
+      personList(uniqB, 8) + '</div>';
 
     root.innerHTML =
       '<div class="compare-grid" style="margin-bottom:16px">' + cards + '</div>' +
@@ -179,8 +204,8 @@
           cells: {
             name: Staff.ui.personLink(p.id, p.name),
             type: Staff.ui.typeBadge(p.type),
-            ra: Staff.ui.roleBadge(p.relation) || '<span class="muted small">—</span>',
-            rb: Staff.ui.roleBadge(byIdB.get(p.id).relation) || '<span class="muted small">—</span>',
+            ra: relBadges(mapA.get(p.id)),
+            rb: relBadges(mapB.get(p.id)),
             op: '<button class="btn small" data-c="' + p.id + '">收集</button>'
           },
           _p: p
@@ -206,8 +231,10 @@
     const shown = list.slice(0, max);
     const more = list.length > max;
     const html = '<div class="work-list" style="margin-top:8px">' + shown.map(function (p) {
+      const rels = Array.from((p.relations || (p.relation ? [p.relation] : [])));
       return '<div class="wl-row">' + Staff.ui.personLink(p.id, p.name) + ' ' +
-        Staff.ui.typeBadge(p.type) + ' ' + (Staff.ui.roleBadge(p.relation) || '') + '</div>';
+        Staff.ui.typeBadge(p.type) + ' ' +
+        (rels.length ? rels.map(function (r) { return Staff.ui.roleBadge(r); }).join(' ') : '') + '</div>';
     }).join('') +
       (more ? '<div class="small muted" style="padding-top:4px">… 共 ' + list.length + ' 人</div>' : '') +
       '</div>';
