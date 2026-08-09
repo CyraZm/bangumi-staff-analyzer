@@ -5,8 +5,8 @@
  */
 (function () {
   const SUBJECT_TYPES = [
-    { code: '', label: '全部类型' },
     { code: 2, label: '动画' },
+    { code: 3, label: '音乐' },
     { code: 4, label: '游戏' },
     { code: 6, label: '三次元' },
     { code: 1, label: '书籍' }
@@ -83,49 +83,64 @@
       });
       const roles = Object.keys(roleCount).sort(function (a, b) { return roleCount[b] - roleCount[a]; });
 
-      // 选中状态：公司默认只选中「动画制作」，个人默认全部选中
+      // 选中状态：默认全部不选；未选择任何标签 = 显示全部
       const state = {
         roles: {},   // role -> bool
-        types: {}    // subjectType -> bool
+        types: {}    // subjectType(2/4/6/1) -> bool
       };
-      roles.forEach(function (r) {
-        if (isCompany) state.roles[r] = (r === '动画制作');
-        else state.roles[r] = true;
-      });
-      [2, 4, 6, 1].forEach(function (t) { state.types[t] = true; });
-      state.types[''] = true; // 未知类型
+      roles.forEach(function (r) { state.roles[r] = false; });
+      SUBJECT_TYPES.forEach(function (t) { state.types[t.code] = false; });
 
       worksCard.innerHTML =
         '<h3>参与作品 <span class="muted small" style="font-weight:400">共 ' + works.length + ' 部</span></h3>' +
-        '<div class="small muted" style="margin-bottom:8px">' + (isCompany
-          ? '默认只统计参与身份为「动画制作」的作品；点击标签可切换其他身份（可多选）：'
-          : '筛选参与身份与条目类型（点击切换，可多选）：') + '</div>' +
+        '<div class="small muted" style="margin-bottom:8px">未选择任何标签时显示全部作品；点击下方标签可按参与身份 / 条目类型筛选（可多选）：</div>' +
         '<div class="row" style="margin-bottom:6px" id="ana-role-chips"></div>' +
-        '<div class="row" style="margin-bottom:12px" id="ana-type-chips"></div>' +
+        '<div class="row" style="margin-bottom:6px" id="ana-type-chips"></div>' +
+        '<div class="row" style="margin-bottom:12px"><button class="btn small secondary" id="ana-works-all">全选</button> ' +
+        '<button class="btn small secondary" id="ana-works-clear">清空</button></div>' +
         '<div class="table-wrap" style="max-height:260px;overflow-y:auto">' +
         '  <table class="data"><thead><tr><th>作品</th><th>类型</th><th>参与身份</th></tr></thead><tbody id="ana-works-tbody"></tbody></table>' +
         '</div>';
 
       const roleRow = worksCard.querySelector('#ana-role-chips');
-      roles.forEach(function (r) {
-        roleRow.appendChild(chip(r + ' (' + roleCount[r] + ')', function (active) { state.roles[r] = active; renderWorksTable(); }, state.roles[r]));
-      });
       const typeRow = worksCard.querySelector('#ana-type-chips');
-      SUBJECT_TYPES.forEach(function (t) {
-        typeRow.appendChild(chip(t.label + ' (' + (typeCount[t.code] || 0) + ')', function (active) { state.types[t.code] = active; renderWorksTable(); }, state.types[t.code]));
+      function renderWorksChips() {
+        roleRow.innerHTML = '';
+        roles.forEach(function (r) {
+          roleRow.appendChild(chip(r + ' (' + roleCount[r] + ')', function (active) { state.roles[r] = active; renderWorksTable(); }, state.roles[r]));
+        });
+        typeRow.innerHTML = '';
+        SUBJECT_TYPES.forEach(function (t) {
+          typeRow.appendChild(chip(t.label + ' (' + (typeCount[t.code] || 0) + ')', function (active) { state.types[t.code] = active; renderWorksTable(); }, state.types[t.code]));
+        });
+      }
+      worksCard.querySelector('#ana-works-all').addEventListener('click', function () {
+        roles.forEach(function (r) { state.roles[r] = true; });
+        SUBJECT_TYPES.forEach(function (t) { state.types[t.code] = true; });
+        renderWorksChips();
+        renderWorksTable();
+      });
+      worksCard.querySelector('#ana-works-clear').addEventListener('click', function () {
+        roles.forEach(function (r) { state.roles[r] = false; });
+        SUBJECT_TYPES.forEach(function (t) { state.types[t.code] = false; });
+        renderWorksChips();
+        renderWorksTable();
       });
 
       function filteredWorks() {
+        const selRoles = roles.filter(function (r) { return state.roles[r]; });
+        const selTypes = SUBJECT_TYPES.map(function (t) { return t.code; }).filter(function (c) { return state.types[c]; });
         return works.filter(function (w) {
-          return state.roles[w.staff || '未知'] && state.types[w.type] !== false && (state.types[w.type] || state.types['']);
+          const roleOk = selRoles.length === 0 || selRoles.indexOf(w.staff || '未知') >= 0;
+          const typeOk = selTypes.length === 0 || selTypes.indexOf(w.type) >= 0;
+          return roleOk && typeOk;
         });
       }
       function renderWorksTable() {
         const list = filteredWorks();
         const tbody = worksCard.querySelector('#ana-works-tbody');
         if (!list.length) {
-          tbody.innerHTML = '<tr><td colspan="3" class="muted small">当前筛选下没有作品' +
-            (isCompany ? '（该公司可能没有「动画制作」身份的作品，可点击上方标签选择其他身份）' : '（可调整上方标签）') + '</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="3" class="muted small">当前筛选下没有作品，可点击上方「清空」恢复全部</td></tr>';
           return;
         }
         tbody.innerHTML = list.map(function (w) {
@@ -135,6 +150,7 @@
             '</td><td>' + Staff.ui.escapeHtml(t ? t.label : '未知') + '</td><td>' + Staff.ui.escapeHtml(w.staff || '') + '</td></tr>';
         }).join('');
       }
+      renderWorksChips();
       renderWorksTable();
 
       // 统计区
@@ -160,7 +176,7 @@
         '<h3>' + (isCompany ? '公司作品中的 staff 频率统计' : '与 TA 共事过的 staff 统计') + '</h3>' +
         '<div class="small muted" style="margin-bottom:12px">' +
         (isCompany
-          ? '默认只统计参与身份为「动画制作」的作品（可用上方标签调整）。对每部作品抓取全部制作人员，统计每个人在多少部作品中出现。'
+          ? '对上方筛选出的作品抓取全部制作人员，统计每个人在多少部作品中出现。未选择任何身份标签时统计全部作品。'
           : '对 TA 参与的作品抓取全部制作人员，统计与 TA 共事过多少部作品。' +
             '同一作品内按人合并；默认不统计 TA 本人。') +
         '</div>' +
@@ -276,14 +292,14 @@
       let sortKey = 'count';
       let sortDesc = true;
 
-      // 职务集合与选中状态（默认全选）
+      // 职务集合与选中状态（默认全不选；未选择 = 显示全部）
       const relCount = {};
       agg.forEach(function (a) {
         a.relations.forEach(function (r) { relCount[r] = (relCount[r] || 0) + 1; });
       });
       const relList = Object.keys(relCount).sort(function (x, y) { return relCount[y] - relCount[x]; });
       const relState = {};
-      relList.forEach(function (r) { relState[r] = true; });
+      relList.forEach(function (r) { relState[r] = false; });
       const REL_COLLAPSED = 10;
       let relExpanded = false;
 
@@ -292,7 +308,7 @@
         '<div class="small muted" style="margin-bottom:8px">统计了 ' + totalWorks + ' 部作品，共出现 ' + agg.length + ' 名 staff' +
         '<span id="ana-type-filter" style="margin-left:10px"></span></div>' +
         '<div class="row" style="margin-bottom:10px" id="ana-result-chips"></div>' +
-        (relList.length ? '<div class="small muted" style="margin-bottom:4px">职务筛选（staff 只要担任过任一选中职务就会显示）：</div>' +
+        (relList.length ? '<div class="small muted" style="margin-bottom:4px">职务筛选（未选择任何职务时显示全部；选中后只显示担任过任一选中职务的 staff）：</div>' +
           '<div class="row" style="margin-bottom:6px;flex-wrap:wrap" id="ana-rel-chips"></div>' +
           '<div class="row" style="margin-bottom:10px" id="ana-rel-actions"></div>' : '') +
         '<div id="ana-table"></div>';
@@ -375,11 +391,17 @@
         if (typeFilter === 'person') list = list.filter(function (a) { return a.type !== 2; });
         if (typeFilter === 'company') list = list.filter(function (a) { return a.type === 2; });
         if (!relList.length) return list;
-        if (relList.every(function (r) { return relState[r]; })) return list;
-        if (!relList.some(function (r) { return relState[r]; })) return [];
+        const sel = relList.filter(function (r) { return relState[r]; });
+        if (!sel.length) return list; // 未选择任何职务 → 显示全部
         return list.filter(function (a) {
           return Array.from(a.relations).some(function (r) { return relState[r]; });
         });
+      }
+      // 职务列：有筛选时只显示命中的职务
+      function relBadges(a) {
+        const active = relList.some(function (r) { return relState[r]; });
+        const rels = active ? Array.from(a.relations).filter(function (r) { return relState[r]; }) : Array.from(a.relations);
+        return rels.slice(0, 4).map(function (r) { return Staff.ui.roleBadge(r); }).join(' ');
       }
       function draw() {
         let list = filtered();
@@ -412,7 +434,7 @@
                 '  <div class="bar-cell" style="flex:1;min-width:80px"><div class="bar-bg"><div class="bar-fill" style="width:' + pct + '%"></div></div></div></div>',
               type: Staff.ui.typeBadge(a.type),
               count: '<strong>' + a.count + '</strong> 部',
-              wn: Array.from(a.relations).slice(0, 4).map(function (r) { return Staff.ui.roleBadge(r); }).join(' '),
+              wn: relBadges(a),
               op: '<button class="btn small" data-collect="' + a.id + '">收集</button>'
             },
             _a: a
