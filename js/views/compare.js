@@ -265,16 +265,21 @@
       return;
     }
     const cards = loaded.map(function (p) {
-      const uniq = groupPersons(p.subject.persons).size;
+      const g = groupPersons(p.subject.persons);
+      const c = personCount(g);
       return '<div class="card"><h3>' + Staff.ui.escapeHtml(p.subject.name) + ' ' + Staff.ui.subjectLink(p.subject.id, '(bgm)') + '</h3>' +
-        '<div class="small muted">' + uniq + ' 名 staff（去重）</div></div>';
+        '<div class="small muted">共 ' + c.total + ' 名（个人 ' + c.persons + ' · 公司 ' + c.companies + '）</div></div>';
     }).join('');
     root.innerHTML = '<div class="compare-grid" style="margin-bottom:16px">' + cards + '</div><div id="cmp-work-result"></div>';
     const wr = root.querySelector('#cmp-work-result');
 
     if (loaded.length === 1) {
-      const uniq = Array.from(groupPersons(loaded[0].subject.persons).values());
-      wr.innerHTML = '<div class="card"><h3>' + Staff.ui.escapeHtml(loaded[0].subject.name) + ' · 制作人员</h3>' + personList(uniq, 15) + '</div>';
+      const g = groupPersons(loaded[0].subject.persons);
+      const uniq = Array.from(g.values());
+      const c = personCount(g);
+      wr.innerHTML = '<div class="card"><h3>' + Staff.ui.escapeHtml(loaded[0].subject.name) + ' · 制作人员</h3>' +
+        '<div class="small muted">共 ' + c.total + ' 名（个人 ' + c.persons + ' · 公司 ' + c.companies + '）</div>' +
+        personList(uniq, 15) + '</div>';
       return;
     }
 
@@ -284,10 +289,16 @@
     const atLeast2 = records.filter(function (r) { return r.count >= 2; });
 
     const parts = [];
-    parts.push('<div class="card"><h3>' + (n === 2 ? '重叠 staff' : '全部重叠') +
+    parts.push('<div class="card">' +
+      '<div class="row" style="justify-content:space-between;align-items:center">' +
+      '<h3 style="margin:0">' + (n === 2 ? '重叠 staff' : '全部重叠') +
       ' <span class="muted small" style="font-weight:400">' + (n === 2 ? '同时出现在两部作品中' : '同时出现在全部 ' + n + ' 部作品中') + '</span></h3>' +
+      '<span class="overlap-count">' + allOverlap.length + ' 人</span></div>' +
       '<div id="cmp-w-all"></div></div>');
-    parts.push('<div class="card"><h3>至少 2 部 <span class="muted small" style="font-weight:400">出现在 2 部及以上作品</span></h3>' +
+    parts.push('<div class="card">' +
+      '<div class="row" style="justify-content:space-between;align-items:center">' +
+      '<h3 style="margin:0">至少 2 部 <span class="muted small" style="font-weight:400">出现在 2 部及以上作品</span></h3>' +
+      '<span class="overlap-count">' + atLeast2.length + ' 人</span></div>' +
       '<div id="cmp-w-some"></div></div>');
 
     const exclusive = loaded.map(function (p) {
@@ -392,7 +403,8 @@
         items.forEach(function (it, i) {
           if (it._panel === p.key) { resFor.push(results[i]); worksFor.push(it._work); }
         });
-        p.company.staff = Staff.api.aggregateStaff(resFor, worksFor, null);
+        p.company.staff = Staff.api.aggregateStaff(resFor, worksFor, null)
+          .filter(function (e) { return e.type !== 2; }); // 只统计个人，过滤公司实体
       });
       renderResult();
     });
@@ -461,10 +473,16 @@
     const atLeast2 = records.filter(function (r) { return r.count >= 2; });
 
     cr.innerHTML =
-      '<div class="card"><h3>' + (n === 2 ? '重叠 staff' : '全部重叠') +
+      '<div class="card">' +
+      '<div class="row" style="justify-content:space-between;align-items:center">' +
+      '<h3 style="margin:0">' + (n === 2 ? '重叠 staff' : '全部重叠') +
       ' <span class="muted small" style="font-weight:400">' + (n === 2 ? '同时在两家公司作品中出现的 staff' : '同时在全部 ' + n + ' 家公司作品中出现的 staff') + '</span></h3>' +
+      '<span class="overlap-count">' + allOverlap.length + ' 人</span></div>' +
       '<div id="cmp-c-all"></div></div>' +
-      '<div class="card"><h3>至少 2 家 <span class="muted small" style="font-weight:400">出现在 2 家及以上公司的 staff（可观察人员流动）</span></h3>' +
+      '<div class="card">' +
+      '<div class="row" style="justify-content:space-between;align-items:center">' +
+      '<h3 style="margin:0">至少 2 家 <span class="muted small" style="font-weight:400">出现在 2 家及以上公司的 staff（可观察人员流动）</span></h3>' +
+      '<span class="overlap-count">' + atLeast2.length + ' 人</span></div>' +
       '<div id="cmp-c-some"></div></div>';
 
     // 全部重叠表：每家公司一列（次数 + 职务）
@@ -528,6 +546,13 @@
       if (p.relation) g.relations.add(p.relation);
     });
     return map;
+  }
+
+  // 统计个人 / 公司数量（Bangumi 人物类型：1=个人，2=公司）
+  function personCount(map) {
+    let persons = 0, companies = 0;
+    map.forEach(function (g) { if (g.type === 2) companies++; else persons++; });
+    return { total: map.size, persons: persons, companies: companies };
   }
 
   function relBadges(relations) {
