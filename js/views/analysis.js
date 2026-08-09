@@ -276,11 +276,25 @@
       let sortKey = 'count';
       let sortDesc = true;
 
+      // 职务集合与选中状态（默认全选）
+      const relCount = {};
+      agg.forEach(function (a) {
+        a.relations.forEach(function (r) { relCount[r] = (relCount[r] || 0) + 1; });
+      });
+      const relList = Object.keys(relCount).sort(function (x, y) { return relCount[y] - relCount[x]; });
+      const relState = {};
+      relList.forEach(function (r) { relState[r] = true; });
+      const REL_COLLAPSED = 10;
+      let relExpanded = false;
+
       const wrap = document.createElement('div');
       wrap.innerHTML =
         '<div class="small muted" style="margin-bottom:8px">统计了 ' + totalWorks + ' 部作品，共出现 ' + agg.length + ' 名 staff' +
         '<span id="ana-type-filter" style="margin-left:10px"></span></div>' +
         '<div class="row" style="margin-bottom:10px" id="ana-result-chips"></div>' +
+        (relList.length ? '<div class="small muted" style="margin-bottom:4px">职务筛选（staff 只要担任过任一选中职务就会显示）：</div>' +
+          '<div class="row" style="margin-bottom:6px;flex-wrap:wrap" id="ana-rel-chips"></div>' +
+          '<div class="row" style="margin-bottom:10px" id="ana-rel-actions"></div>' : '') +
         '<div id="ana-table"></div>';
 
       const chipsRow = wrap.querySelector('#ana-result-chips');
@@ -301,10 +315,71 @@
         chipsRow.appendChild(ch);
       });
 
+      // 职务筛选 chips
+      const relRow = wrap.querySelector('#ana-rel-chips');
+      const relActions = wrap.querySelector('#ana-rel-actions');
+      function renderRelChips() {
+        if (!relRow) return;
+        relRow.innerHTML = '';
+        relList.forEach(function (r, i) {
+          if (!relExpanded && i >= REL_COLLAPSED) return;
+          const ch = document.createElement('span');
+          ch.className = 'chip' + (relState[r] ? ' active' : '');
+          ch.textContent = r + ' (' + relCount[r] + ')';
+          ch.addEventListener('click', function () {
+            relState[r] = !relState[r];
+            ch.classList.toggle('active', relState[r]);
+            draw();
+          });
+          relRow.appendChild(ch);
+        });
+      }
+      function renderRelActions() {
+        if (!relActions) return;
+        relActions.innerHTML = '';
+        if (relList.length > REL_COLLAPSED) {
+          const more = document.createElement('button');
+          more.className = 'btn small secondary';
+          more.textContent = relExpanded ? '收起职务' : '展开全部 ' + relList.length + ' 个职务';
+          more.addEventListener('click', function () {
+            relExpanded = !relExpanded;
+            renderRelChips();
+            renderRelActions();
+          });
+          relActions.appendChild(more);
+        }
+        const clear = document.createElement('button');
+        clear.className = 'btn small secondary';
+        clear.textContent = '清空';
+        clear.addEventListener('click', function () {
+          relList.forEach(function (r) { relState[r] = false; });
+          renderRelChips();
+          draw();
+        });
+        relActions.appendChild(clear);
+        const all = document.createElement('button');
+        all.className = 'btn small secondary';
+        all.textContent = '全选';
+        all.addEventListener('click', function () {
+          relList.forEach(function (r) { relState[r] = true; });
+          renderRelChips();
+          draw();
+        });
+        relActions.appendChild(all);
+      }
+      renderRelChips();
+      renderRelActions();
+
       function filtered() {
-        if (typeFilter === 'person') return agg.filter(function (a) { return a.type !== 2; });
-        if (typeFilter === 'company') return agg.filter(function (a) { return a.type === 2; });
-        return agg.slice();
+        let list = agg.slice();
+        if (typeFilter === 'person') list = list.filter(function (a) { return a.type !== 2; });
+        if (typeFilter === 'company') list = list.filter(function (a) { return a.type === 2; });
+        if (!relList.length) return list;
+        if (relList.every(function (r) { return relState[r]; })) return list;
+        if (!relList.some(function (r) { return relState[r]; })) return [];
+        return list.filter(function (a) {
+          return Array.from(a.relations).some(function (r) { return relState[r]; });
+        });
       }
       function draw() {
         let list = filtered();
@@ -315,6 +390,11 @@
           if (r === 0) r = (a.name || '').localeCompare(b.name || '', 'zh');
           return sortDesc ? -r : r;
         });
+        const target = wrap.querySelector('#ana-table');
+        if (!list.length) {
+          target.innerHTML = '<div class="empty-box">当前筛选下没有匹配的 staff，试试调整上面的类型或职务筛选</div>';
+          return;
+        }
         const headers = [
           { key: 'rank', label: '#', sortable: false, num: true },
           { key: 'name', label: 'Staff', sortable: true },
@@ -342,7 +422,6 @@
           if (sortKey === key) { sortDesc = !sortDesc; } else { sortKey = key; sortDesc = (key === 'name') ? false : true; }
           draw();
         });
-        const target = wrap.querySelector('#ana-table');
         target.innerHTML = '';
         target.appendChild(table.el);
         table.render({ key: sortKey, desc: sortDesc });
