@@ -1,15 +1,5 @@
 /* bangumi-staff-analyzer 首页：搜索人物 / 公司 */
 (function () {
-  const CAREERS = [
-    { code: '', label: '全部' },
-    { code: 'producer', label: '制作人' },
-    { code: 'artist', label: '画师/动画师' },
-    { code: 'actor', label: '声优' },
-    { code: 'mangaka', label: '漫画家' },
-    { code: 'writer', label: '作家/脚本' },
-    { code: 'illustrator', label: '绘师' }
-  ];
-
   function render(container) {
     container.innerHTML =
       '<h2 class="page-title">搜索制作人员 / 制作公司</h2>' +
@@ -19,27 +9,13 @@
       '    <input type="text" id="home-search" placeholder="输入名称，如：京都动画、山田尚子、石原立也" style="flex:1;min-width:240px">' +
       '    <button class="btn" id="home-search-btn">搜索</button>' +
       '  </div>' +
-      '  <div class="row" style="margin-top:12px" id="home-careers"></div>' +
       '</div>' +
       '<div id="home-result"></div>';
 
-    const careerRow = container.querySelector('#home-careers');
-    CAREERS.forEach(function (c, i) {
-      const chip = document.createElement('span');
-      chip.className = 'chip' + (i === 0 ? ' active' : '');
-      chip.textContent = c.label;
-      chip.dataset.career = c.code;
-      chip.addEventListener('click', function () {
-        careerRow.querySelectorAll('.chip').forEach(function (x) { x.classList.remove('active'); });
-        chip.classList.add('active');
-      });
-      careerRow.appendChild(chip);
-    });
-
-    let lastKw = '';
     const input = container.querySelector('#home-search');
     const btn = container.querySelector('#home-search-btn');
     const result = container.querySelector('#home-result');
+    let lastKw = '';
 
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSearch(); });
     btn.addEventListener('click', doSearch);
@@ -47,10 +23,9 @@
     async function doSearch() {
       const kw = input.value.trim();
       if (!kw) { Staff.ui.toast('请输入搜索关键词'); return; }
-      const career = careerRow.querySelector('.chip.active').dataset.career;
       result.innerHTML = Staff.ui.loading('正在搜索「' + kw + '」…');
       try {
-        const persons = await Staff.api.searchPersons(kw, career);
+        const persons = await Staff.api.searchPersons(kw, '');
         lastKw = kw;
         renderResults(persons);
       } catch (err) {
@@ -60,7 +35,7 @@
 
     function renderResults(persons) {
       if (!persons.length) {
-        result.innerHTML = Staff.ui.empty('没有找到「' + lastKw + '」，试试其他关键词或放宽职业筛选');
+        result.innerHTML = Staff.ui.empty('没有找到「' + lastKw + '」，试试其他关键词');
         return;
       }
       const rows = persons.map(function (p) {

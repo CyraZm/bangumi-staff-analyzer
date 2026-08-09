@@ -83,18 +83,23 @@
       });
       const roles = Object.keys(roleCount).sort(function (a, b) { return roleCount[b] - roleCount[a]; });
 
-      // 选中状态：默认全部选中
+      // 选中状态：公司默认只选中「动画制作」，个人默认全部选中
       const state = {
         roles: {},   // role -> bool
         types: {}    // subjectType -> bool
       };
-      roles.forEach(function (r) { state.roles[r] = true; });
+      roles.forEach(function (r) {
+        if (isCompany) state.roles[r] = (r === '动画制作');
+        else state.roles[r] = true;
+      });
       [2, 4, 6, 1].forEach(function (t) { state.types[t] = true; });
       state.types[''] = true; // 未知类型
 
       worksCard.innerHTML =
         '<h3>参与作品 <span class="muted small" style="font-weight:400">共 ' + works.length + ' 部</span></h3>' +
-        '<div class="small muted" style="margin-bottom:8px">筛选参与身份与条目类型（点击切换，可多选）：</div>' +
+        '<div class="small muted" style="margin-bottom:8px">' + (isCompany
+          ? '默认只统计参与身份为「动画制作」的作品；点击标签可切换其他身份（可多选）：'
+          : '筛选参与身份与条目类型（点击切换，可多选）：') + '</div>' +
         '<div class="row" style="margin-bottom:6px" id="ana-role-chips"></div>' +
         '<div class="row" style="margin-bottom:12px" id="ana-type-chips"></div>' +
         '<div class="table-wrap" style="max-height:260px;overflow-y:auto">' +
@@ -118,6 +123,11 @@
       function renderWorksTable() {
         const list = filteredWorks();
         const tbody = worksCard.querySelector('#ana-works-tbody');
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="3" class="muted small">当前筛选下没有作品' +
+            (isCompany ? '（该公司可能没有「动画制作」身份的作品，可点击上方标签选择其他身份）' : '（可调整上方标签）') + '</td></tr>';
+          return;
+        }
         tbody.innerHTML = list.map(function (w) {
           const t = SUBJECT_TYPES.find(function (x) { return x.code === w.type; });
           return '<tr><td>' + Staff.ui.subjectLink(w.id, displayName(w)) +
@@ -150,7 +160,7 @@
         '<h3>' + (isCompany ? '公司作品中的 staff 频率统计' : '与 TA 共事过的 staff 统计') + '</h3>' +
         '<div class="small muted" style="margin-bottom:12px">' +
         (isCompany
-          ? '对上面筛选出的每部作品抓取全部制作人员，统计每个人在多少部作品中出现。'
+          ? '默认只统计参与身份为「动画制作」的作品（可用上方标签调整）。对每部作品抓取全部制作人员，统计每个人在多少部作品中出现。'
           : '对 TA 参与的作品抓取全部制作人员，统计与 TA 共事过多少部作品。' +
             '同一作品内按人合并；默认不统计 TA 本人。') +
         '</div>' +
