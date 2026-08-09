@@ -249,41 +249,11 @@
       return box;
     }
 
-    /* 聚合：按 personId 合并
-     * count：出现在多少部作品（去重）
-     * relWork：{职务 -> 担任该职务的作品数}
+    /* 聚合：按 personId 合并（见 api.js aggregateStaff）
+     * count：出现在多少部作品（去重）；relWork：{职务 -> 担任该职务的作品数}
      */
     function aggregate(results, works, excludeId) {
-      const map = new Map();
-      results.forEach(function (r, i) {
-        if (!r.ok) return;
-        const work = works[i];
-        const staffList = r.data || [];
-        const perWork = new Map(); // personId -> Set(relations)（同一作品内按人合并职务）
-        staffList.forEach(function (s) {
-          if (excludeId && String(s.id) === String(excludeId)) return;
-          if (!perWork.has(s.id)) perWork.set(s.id, new Set());
-          if (s.relation) perWork.get(s.id).add(s.relation);
-        });
-        perWork.forEach(function (relations, pid) {
-          const s = staffList.find(function (x) { return x.id === pid; });
-          let entry = map.get(pid);
-          if (!entry) {
-            entry = {
-              id: pid, name: s.name, type: s.type, career: s.career || [],
-              count: 0, relWork: {}, relations: new Set(), works: []
-            };
-            map.set(pid, entry);
-          }
-          entry.count++;
-          relations.forEach(function (rel) {
-            entry.relations.add(rel);
-            entry.relWork[rel] = (entry.relWork[rel] || 0) + 1;
-          });
-          entry.works.push({ subjectId: work.id, subjectName: displayName(work), relation: Array.from(relations).join('、') });
-        });
-      });
-      return Array.from(map.values());
+      return Staff.api.aggregateStaff(results, works, excludeId);
     }
 
     /* 渲染统计结果 */

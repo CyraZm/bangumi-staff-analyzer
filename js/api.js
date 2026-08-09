@@ -212,6 +212,49 @@
     return m ? m[1] : null;
   }
 
+  /* 按 personId 聚合 staff（分析与公司对比共用）
+   * results: runBatch 返回的 [{ok, data}]，与 works 一一对应
+   * entry: {id,name,type,career,count,relWork,relations,works}
+   *  - count：出现在多少部作品（去重）
+   *  - relWork：{职务 -> 担任该职务的作品数}
+   */
+  function aggregateStaff(results, works, excludeId) {
+    const map = new Map();
+    results.forEach(function (r, i) {
+      if (!r || !r.ok) return;
+      const work = works[i];
+      const staffList = r.data || [];
+      const perWork = new Map(); // personId -> Set(relations)（同一作品内按人合并职务）
+      staffList.forEach(function (s) {
+        if (excludeId && String(s.id) === String(excludeId)) return;
+        if (!perWork.has(s.id)) perWork.set(s.id, new Set());
+        if (s.relation) perWork.get(s.id).add(s.relation);
+      });
+      perWork.forEach(function (relations, pid) {
+        const s = staffList.find(function (x) { return x.id === pid; });
+        let entry = map.get(pid);
+        if (!entry) {
+          entry = {
+            id: pid, name: s.name, type: s.type, career: s.career || [],
+            count: 0, relWork: {}, relations: new Set(), works: []
+          };
+          map.set(pid, entry);
+        }
+        entry.count++;
+        relations.forEach(function (rel) {
+          entry.relations.add(rel);
+          entry.relWork[rel] = (entry.relWork[rel] || 0) + 1;
+        });
+        entry.works.push({
+          subjectId: work.id,
+          subjectName: work.name_cn || work.name || ('ID ' + work.id),
+          relation: Array.from(relations).join('、')
+        });
+      });
+    });
+    return Array.from(map.values());
+  }
+
   Staff.api = {
     setRate: setRate,
     searchPersons: searchPersons,
@@ -222,6 +265,7 @@
     getSubject: getSubject,
     runBatch: runBatch,
     parseSubjectId: parseSubjectId,
+    aggregateStaff: aggregateStaff,
     defaultLimiter: defaultLimiter
   };
 })();
