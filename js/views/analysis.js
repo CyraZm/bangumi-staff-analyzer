@@ -108,11 +108,11 @@
 
       const roleRow = worksCard.querySelector('#ana-role-chips');
       roles.forEach(function (r) {
-        roleRow.appendChild(chip(r + ' (' + roleCount[r] + ')', function (active) { state.roles[r] = active; renderWorksTable(); }));
+        roleRow.appendChild(chip(r + ' (' + roleCount[r] + ')', function (active) { state.roles[r] = active; renderWorksTable(); }, state.roles[r]));
       });
       const typeRow = worksCard.querySelector('#ana-type-chips');
       SUBJECT_TYPES.forEach(function (t) {
-        typeRow.appendChild(chip(t.label + ' (' + (typeCount[t.code] || 0) + ')', function (active) { state.types[t.code] = active; renderWorksTable(); }));
+        typeRow.appendChild(chip(t.label + ' (' + (typeCount[t.code] || 0) + ')', function (active) { state.types[t.code] = active; renderWorksTable(); }, state.types[t.code]));
       });
 
       function filteredWorks() {
@@ -141,9 +141,9 @@
       worksCard.appendChild(buildStats(person, isCompany, filteredWorks, works));
     }
 
-    function chip(label, onChange) {
+    function chip(label, onChange, active) {
       const c = document.createElement('span');
-      c.className = 'chip active';
+      c.className = 'chip' + (active ? ' active' : '');
       c.textContent = label;
       c.addEventListener('click', function () {
         const on = c.classList.toggle('active');
