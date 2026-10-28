@@ -6,6 +6,7 @@ import Darwin
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let base = URL(string: "http://localhost:8000")!
     private let bundleID = "tv.bangumi.staff-analyzer"
+    private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
     private var server: Process?
     private var errorPipe: Pipe?
     private var sessionToken: String?
@@ -33,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         health { info in
             if let info = info {
-                guard info["version"] as? String == "1.5.0" else {
+                guard info["version"] as? String == self.appVersion else {
                     self.fail("另一个版本仍在运行", "请先在旧页面点击「关闭应用」，然后重新打开 Staff Analyzer。")
                     return
                 }
@@ -61,7 +62,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func openBrowser() {
-        NSWorkspace.shared.open(base)
+        // Existing browser caches predate the server's no-store headers.
+        // A fresh entry URL bypasses cached HTML without changing the storage origin.
+        var entry = URLComponents(url: base, resolvingAgainstBaseURL: false)!
+        entry.path = "/"
+        entry.queryItems = [
+            URLQueryItem(name: "v", value: appVersion),
+            URLQueryItem(name: "launch", value: UUID().uuidString)
+        ]
+        entry.fragment = "/home"
+        NSWorkspace.shared.open(entry.url!)
     }
 
     private func health(_ completion: @escaping ([String: Any]?) -> Void) {
@@ -107,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else {
                     // A simultaneous launch may have won the port.
                     self.health { info in
-                        if let info = info, info["version"] as? String == "1.5.0" {
+                        if let info = info, info["version"] as? String == self.appVersion {
                             self.server = nil
                             self.accept(info)
                             self.startMonitor()
