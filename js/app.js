@@ -14,12 +14,17 @@
   }
 
   function navigate() {
+    if (Staff.runtime && Staff.runtime.isStopped()) return;
     const route = parseHash();
     const view = views[route.name];
     const main = document.getElementById('view');
     document.querySelectorAll('#nav a').forEach(function (a) {
-      a.classList.toggle('active', a.dataset.route === route.name);
+      const active = a.dataset.route === (route.name === 'analysis' ? 'home' : route.name);
+      a.classList.toggle('active', active);
+      if (active) a.setAttribute('aria-current', 'page');
+      else a.removeAttribute('aria-current');
     });
+    document.getElementById('route-label').textContent = { home: '探索与分析', analysis: '人物与公司分析', compare: '作品 / 公司对比', collections: '我的收集' }[route.name] || '页面不存在';
     if (!view) {
       main.innerHTML = Staff.ui.empty('页面不存在，<a href="#/home">返回首页</a>');
       return;
@@ -72,7 +77,8 @@
         onOk: function () {
           const conc = parseInt(holder.querySelector('#set-conc').value, 10);
           const int = parseInt(holder.querySelector('#set-int').value, 10);
-          if (conc < 1 || conc > 20) { Staff.ui.toast('并发数需在 1-20 之间'); return false; }
+          if (!Number.isFinite(conc) || conc < 1 || conc > 20) { Staff.ui.toast('并发数需在 1-20 之间'); return false; }
+          if (!Number.isFinite(int) || int < 0) { Staff.ui.toast('请求间隔需为不小于 0 的数字'); return false; }
           Staff.api.setRate(conc, int);
           return Promise.all([
             Staff.db.put(Staff.db.STORES.settings, { key: SETTING_KEYS.concurrency, value: conc }),
@@ -100,6 +106,11 @@
   }
 
   document.getElementById('btn-settings').addEventListener('click', openSettings);
+  document.querySelector('.skip-link').addEventListener('click', function (e) {
+    e.preventDefault();
+    document.getElementById('view').focus();
+  });
+  document.querySelectorAll('[data-icon]').forEach(function (el) { el.innerHTML = Staff.ui.icon(el.dataset.icon); });
 
   Staff.app = { navigate: navigate, parseHash: parseHash, openSettings: openSettings };
 

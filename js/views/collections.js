@@ -7,8 +7,8 @@
   function render(container) {
     container.innerHTML =
       '<div class="row" style="justify-content:space-between;align-items:flex-start">' +
-      '  <div><h2 class="page-title">我的分类收集</h2>' +
-      '  <p class="page-desc">给感兴趣的 staff 打标签、写备注，或建分组整理（如「某制片人的班底」）。数据仅保存在本地浏览器。</p></div>' +
+      '  <div><h2 class="page-title">留住值得关注的名字</h2>' +
+      '  <p class="page-desc">用标签、备注与自定义分组整理制作人员。所有收集都保存在当前浏览器，随时可以导出备份。</p></div>' +
       '  <div class="row">' +
       '    <button class="btn secondary small" id="col-export-json">导出 JSON</button>' +
       '    <button class="btn secondary small" id="col-export-csv">导出 CSV</button>' +
@@ -25,7 +25,7 @@
       '<div class="card">' +
       '  <h3>分组</h3>' +
       '  <div class="row" style="margin-bottom:12px">' +
-      '    <input type="text" id="col-group-name" placeholder="分组名称，如：山田尚子班底" style="flex:1;min-width:200px">' +
+      '    <input type="text" id="col-group-name" aria-label="新分组名称" placeholder="分组名称，如：关注的演出家" style="flex:1;min-width:200px">' +
       '    <button class="btn" id="col-group-add">新建分组</button>' +
       '  </div>' +
       '  <div id="col-groups"></div>' +

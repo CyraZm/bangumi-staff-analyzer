@@ -24,6 +24,7 @@
     async function load() {
       try {
         const person = await Staff.api.getPerson(id);
+        root.innerHTML = '';
         renderHeader(person);
         renderWorks(person);
       } catch (err) {
@@ -237,6 +238,7 @@
             text.textContent = done + ' / ' + total;
           }
         }).then(function (results) {
+          if (Staff.runtime && Staff.runtime.isStopped()) return;
           signal = null;
           startBtn.disabled = false;
           progressBox.style.display = 'none';

@@ -21,11 +21,12 @@
   /* ============ 渲染入口 ============ */
   function render(container) {
     container.innerHTML =
-      '<h2 class="page-title">对比</h2>' +
-      '<p class="page-desc">' +
-      '  <span class="chip active" id="mode-work">作品对比</span> ' +
-      '  <span class="chip" id="mode-company">公司对比</span>' +
-      '</p>' +
+      '<h2 class="page-title">发现制作人员的交集</h2>' +
+      '<p class="page-desc">选择 2–8 部作品或公司，比较共同参与的 staff 和各自职务。合作记录可以提供线索，但不直接代表固定班底。</p>' +
+      '<div class="compare-tabs" role="group" aria-label="对比类型">' +
+      '  <button type="button" class="chip" id="mode-work">作品对比</button> ' +
+      '  <button type="button" class="chip" id="mode-company">公司对比</button>' +
+      '</div>' +
       '<div id="cmp-panels"></div>' +
       '<div id="cmp-action" style="margin-bottom:16px"></div>' +
       '<div id="cmp-result"></div>';
@@ -33,15 +34,23 @@
     container.querySelector('#mode-work').addEventListener('click', function () { switchMode('work'); });
     container.querySelector('#mode-company').addEventListener('click', function () { switchMode('company'); });
 
+    updateModeButtons();
     resetPanels();
   }
 
   function switchMode(mode) {
     if (state.mode === mode) return;
     state.mode = mode;
-    document.querySelector('#mode-work').classList.toggle('active', mode === 'work');
-    document.querySelector('#mode-company').classList.toggle('active', mode === 'company');
+    updateModeButtons();
     resetPanels();
+  }
+
+  function updateModeButtons() {
+    ['work', 'company'].forEach(function (mode) {
+      const button = document.querySelector('#mode-' + mode);
+      button.classList.toggle('active', state.mode === mode);
+      button.setAttribute('aria-pressed', state.mode === mode ? 'true' : 'false');
+    });
   }
 
   function resetPanels() {
@@ -398,6 +407,7 @@
         document.querySelector('#cmp-prog').textContent = '聚合 staff：' + done + ' / ' + total;
       }
     }).then(function (results) {
+      if (Staff.runtime && Staff.runtime.isStopped()) return;
       companies.forEach(function (p) {
         const resFor = [], worksFor = [];
         items.forEach(function (it, i) {

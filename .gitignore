@@ -6,3 +6,8 @@ node_modules/
 .vscode/
 icon-v2-glossy.jpg
 .trae-html-share-packages/
+Staff Analyzer.app/
+output/
+.playwright-cli/
+__pycache__/
+*.pyc

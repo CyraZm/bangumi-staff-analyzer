@@ -7,8 +7,23 @@
 (function () {
   const C = window.Staff.config;
   const DAY = 24 * 3600 * 1000;
+  const lifecycle = new AbortController();
+  let stopped = false;
 
-  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function cancelled() { return Object.assign(new Error('应用已关闭'), { cancelled: true }); }
+  function checkRunning() { if (stopped) throw cancelled(); }
+  function sleep(ms) {
+    return new Promise(function (resolve, reject) {
+      if (stopped) { reject(cancelled()); return; }
+      const timer = setTimeout(function () { lifecycle.signal.removeEventListener('abort', abort); resolve(); }, ms);
+      function abort() { clearTimeout(timer); reject(cancelled()); }
+      lifecycle.signal.addEventListener('abort', abort, { once: true });
+    });
+  }
+  function stopAll() {
+    stopped = true;
+    lifecycle.abort();
+  }
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
   /* ---------------- 限流器 ---------------- */
@@ -26,14 +41,15 @@
     }
     push(path, options) {
       options = options || {};
+      if (stopped) return Promise.reject(cancelled());
       return new Promise(function (resolve, reject) {
         this.queue.push({ path: path, options: options, resolve: resolve, reject: reject });
         this.pump();
       }.bind(this));
     }
-    async pump() {
+    pump() {
       while (this.active < this.concurrency && this.queue.length) {
-        if (this.signal && this.signal.cancelled) {
+        if (stopped || (this.signal && this.signal.cancelled)) {
           const item = this.queue.shift();
           item.reject({ cancelled: true });
           continue;
@@ -41,9 +57,12 @@
         const item = this.queue.shift();
         this.active++;
         const wait = Math.max(0, this.last + this.interval - Date.now());
-        if (wait) await sleep(wait);
-        this.last = Date.now();
-        doFetch(item).then(item.resolve, item.reject)
+        this.last = Date.now() + wait;
+        sleep(wait).then(function () {
+          checkRunning();
+          if (this.signal && this.signal.cancelled) throw cancelled();
+          return doFetch(item);
+        }.bind(this)).then(item.resolve, item.reject)
           .finally(function () { this.active--; this.pump(); }.bind(this));
       }
     }
@@ -51,10 +70,12 @@
 
   /* ---------------- 单次请求（带重试） ---------------- */
   async function doFetch(item) {
+    checkRunning();
     const url = C.apiBase + item.path;
     const init = {
       method: item.options.method || 'GET',
-      headers: { 'Accept': 'application/json' }
+      headers: { 'Accept': 'application/json' },
+      signal: lifecycle.signal
     };
     if (item.options.body) {
       init.headers['Content-Type'] = 'application/json';
@@ -62,9 +83,11 @@
     }
     let res;
     for (let attempt = 1; attempt <= 4; attempt++) {
+      checkRunning();
       try {
         res = await fetch(url, init);
       } catch (err) {
+        if (stopped) throw cancelled();
         if (attempt < 4) { await sleep(600 * attempt); continue; }
         throw new Error('网络错误，请检查网络连接后重试');
       }
@@ -91,6 +114,7 @@
     } catch (e) { /* 缓存失败不影响主流程 */ }
   }
   async function cachedRequest(key, path, options, ttl, force) {
+    checkRunning();
     if (!force) {
       const hit = await readCache(key);
       if (hit && hit.data !== undefined && hit.ts + ttl > Date.now()) return hit.data;
@@ -102,6 +126,7 @@
 
   /* ---------------- 分页循环 ---------------- */
   async function searchLoop(apiPath, buildBody, key, ttl, force) {
+    checkRunning();
     if (!force) {
       const hit = await readCache(key);
       if (hit && hit.data !== undefined && hit.ts + ttl > Date.now()) return hit.data;
@@ -184,6 +209,7 @@
       }
       const proms = items.map(function (item, i) {
         return Promise.resolve().then(async function () {
+          checkRunning();
           if (item.key && !item.force) {
             const hit = await readCache(item.key);
             if (hit && hit.data !== undefined && hit.ts + (item.ttl || DAY) > Date.now()) {
@@ -199,7 +225,7 @@
           results[i] = { ok: false, error: (err && err.cancelled) ? 'cancelled' : err };
         }).then(function () {
           done++;
-          if (options.onProgress) options.onProgress(done, total);
+          if (!stopped && options.onProgress) options.onProgress(done, total);
         });
       });
       Promise.all(proms).then(function () { resolve(results); });
@@ -256,6 +282,7 @@
   }
 
   Staff.api = {
+    stopAll: stopAll,
     setRate: setRate,
     searchPersons: searchPersons,
     searchSubjects: searchSubjects,
