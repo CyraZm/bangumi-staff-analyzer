@@ -1,6 +1,6 @@
 /* bangumi-staff-analyzer API 层
  * - 限流队列：并发数 + 请求间隔可调
- * - 缓存：所有响应写入 IndexedDB，命中且未过期则直接返回
+ * - 缓存：响应仅缓存在当前页面内存，刷新或关闭后清空
  * - 重试：429 / 5xx / 网络错误自动退避重试
  * - runBatch：批量请求，带进度回调与取消信号
  */
@@ -8,6 +8,8 @@
   const C = window.Staff.config;
   const DAY = 24 * 3600 * 1000;
   const lifecycle = new AbortController();
+  const cache = new Map();
+  let cacheEpoch = 0;
   let stopped = false;
 
   function cancelled() { return Object.assign(new Error('应用已关闭'), { cancelled: true }); }
@@ -23,6 +25,7 @@
   function stopAll() {
     stopped = true;
     lifecycle.abort();
+    clearCache();
   }
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
 
@@ -74,6 +77,7 @@
     const url = C.apiBase + item.path;
     const init = {
       method: item.options.method || 'GET',
+      cache: 'no-store',
       headers: { 'Accept': 'application/json' },
       signal: lifecycle.signal
     };
@@ -106,27 +110,28 @@
 
   /* ---------------- 缓存 ---------------- */
   async function readCache(key) {
-    try { return await Staff.db.get(Staff.db.STORES.cache, key); } catch (e) { return null; }
+    return cache.has(key) ? structuredClone(cache.get(key)) : null;
   }
-  async function writeCache(key, data) {
-    try {
-      await Staff.db.put(Staff.db.STORES.cache, { key: key, data: data, ts: Date.now() });
-    } catch (e) { /* 缓存失败不影响主流程 */ }
+  async function writeCache(key, data, epoch) {
+    if (!stopped && epoch === cacheEpoch) cache.set(key, { key: key, data: structuredClone(data), ts: Date.now() });
   }
+  function clearCache() { cache.clear(); cacheEpoch++; }
   async function cachedRequest(key, path, options, ttl, force) {
     checkRunning();
+    const epoch = cacheEpoch;
     if (!force) {
       const hit = await readCache(key);
       if (hit && hit.data !== undefined && hit.ts + ttl > Date.now()) return hit.data;
     }
     const data = await defaultLimiter.push(path, options || {});
-    if (data !== undefined && data !== null) await writeCache(key, data);
+    if (data !== undefined && data !== null) await writeCache(key, data, epoch);
     return data;
   }
 
   /* ---------------- 分页循环 ---------------- */
   async function searchLoop(apiPath, buildBody, key, ttl, force) {
     checkRunning();
+    const epoch = cacheEpoch;
     if (!force) {
       const hit = await readCache(key);
       if (hit && hit.data !== undefined && hit.ts + ttl > Date.now()) return hit.data;
@@ -143,7 +148,7 @@
       if (!data || !list.length || results.length >= data.total) break;
       offset += list.length;
     }
-    await writeCache(key, results);
+    await writeCache(key, results, epoch);
     return results;
   }
 
@@ -196,6 +201,7 @@
    */
   function runBatch(items, options) {
     options = options || {};
+    const epoch = cacheEpoch;
     const limiter = new Limiter(options.concurrency || C.defaultConcurrency, options.interval !== undefined ? options.interval : C.defaultInterval);
     limiter.signal = options.signal || null;
     const total = items.length;
@@ -217,7 +223,7 @@
             }
           }
           const data = await limiter.push(item.path, item.options || {});
-          if (item.key && data !== undefined && data !== null) await writeCache(item.key, data);
+          if (item.key && data !== undefined && data !== null) await writeCache(item.key, data, epoch);
           return { cached: false, data: data };
         }).then(function (res) {
           results[i] = { ok: true, cached: res.cached, data: res.data };
@@ -282,6 +288,7 @@
   }
 
   Staff.api = {
+    clearCache: clearCache,
     stopAll: stopAll,
     setRate: setRate,
     searchPersons: searchPersons,

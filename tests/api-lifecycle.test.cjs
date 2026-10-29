@@ -11,7 +11,7 @@ function makeApi(fetch) {
       searchLimit: 50, cacheTtl: { person: 100, search: 100 } },
     db: { STORES: { cache: 'cache' }, get: async () => null, put: async () => {} }
   };
-  vm.runInNewContext(source, { window: { Staff }, Staff, fetch, AbortController, setTimeout, clearTimeout });
+  vm.runInNewContext(source, { window: { Staff }, Staff, fetch, AbortController, setTimeout, clearTimeout, structuredClone });
   return Staff.api;
 }
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -67,4 +67,42 @@ test('rate-limited starts remain spaced while results still aggregate correctly'
   assert.ok(result.every(item => item.ok));
   assert.equal(times.length, 5);
   for (let i = 1; i < times.length; i++) assert.ok(times[i] - times[i - 1] >= 25);
+});
+
+test('responses are reused only in the current API instance without reading or writing persistent storage', async () => {
+  let requests = 0;
+  const fetch = async (url, init) => {
+    requests++;
+    assert.equal(init.cache, 'no-store');
+    return { status: 200, json: async () => ({ id: 1, name: 'original' }) };
+  };
+  const api = makeApi(fetch);
+  const first = await api.getPerson(1);
+  first.name = 'changed outside the cache';
+  assert.equal((await api.getPerson(1)).name, 'original');
+  assert.equal(requests, 1);
+  const anotherPage = makeApi(fetch);
+  await anotherPage.getPerson(1);
+  assert.equal(requests, 2);
+  api.clearCache();
+  await api.getPerson(1);
+  assert.equal(requests, 3);
+});
+
+test('a request started before clearing the cache cannot repopulate it afterward', async () => {
+  let requests = 0, release, markStarted;
+  const started = new Promise(resolve => markStarted = resolve);
+  const api = makeApi(async () => {
+    requests++;
+    if (requests === 1) await new Promise(resolve => { release = resolve; markStarted(); });
+    return { status: 200, json: async () => ({ id: 1 }) };
+  });
+  const pending = api.getPerson(1);
+  await started;
+  api.clearCache(); release();
+  await pending;
+  await api.getPerson(1);
+  assert.equal(requests, 2);
+  await api.getPerson(1);
+  assert.equal(requests, 2);
 });

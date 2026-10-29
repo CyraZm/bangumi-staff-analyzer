@@ -19,11 +19,8 @@
   let state = sessions.work;
   let nextKey = 1;
   let workspaceRoot = null;
-  let saveTimer = null;
-  let saveEpoch = 0;
-  let saveQueue = Promise.resolve();
-  let suppressSaves = false;
-  const WORKSPACE_KEY = 'compare-workspace-v1';
+  let captureTimer = null;
+  let suppressCaptures = false;
 
   function query(selector) { return workspaceRoot && workspaceRoot.querySelector(selector); }
 
@@ -41,10 +38,10 @@
 
   function applyUi() {
     if (!state.ui || !workspaceRoot) return;
-    suppressSaves = true;
+    suppressCaptures = true;
     workspaceRoot.querySelectorAll('details').forEach(function (el, i) { el.open = !!state.ui.details[i]; });
     workspaceRoot.querySelectorAll('.table-wrap').forEach(function (el, i) { el.scrollLeft = state.ui.scrolls[i] || 0; });
-    suppressSaves = false;
+    suppressCaptures = false;
   }
 
   function afterRender() {
@@ -56,100 +53,38 @@
     });
   }
 
-  function snapshot() {
-    const modes = {};
-    ['work', 'company'].forEach(function (mode) {
-      const session = sessions[mode];
-      modes[mode] = {
-        overlapScope: session.overlapScope, ui: session.ui,
-        concurrency: session.concurrency, interval: session.interval,
-        panels: session.panels.map(function (p) {
-          // Derived maps and in-progress requests are rebuilt; IndexedDB preserves staff relation Sets.
-          return { key: p.key, index: p.index, workType: p.workType, query: p.query || '', subject: p.subject, company: p.company };
-        })
-      };
-    });
-    return { schema: 1, activeMode: state.mode, nextKey: nextKey, modes: modes };
+  function rememberUi() {
+    clearTimeout(captureTimer);
+    if (!suppressCaptures) captureUi();
   }
 
-  function saveStatus(message) {
-    const status = query('#cmp-save-status');
-    if (status) status.textContent = message;
+  function scheduleCapture() {
+    if (suppressCaptures) return;
+    clearTimeout(captureTimer);
+    captureTimer = setTimeout(rememberUi, 180);
   }
 
-  function flushSave() {
-    clearTimeout(saveTimer);
-    saveTimer = null;
-    if (suppressSaves || !workspaceRoot) return saveQueue;
-    captureUi();
-    const value = snapshot(), epoch = saveEpoch;
-    saveQueue = saveQueue.catch(function () {}).then(function () {
-      if (epoch !== saveEpoch) return;
-      return Staff.db.put(Staff.db.STORES.settings, { key: WORKSPACE_KEY, value: value }).then(function () {
-        if (epoch === saveEpoch) saveStatus('对比已保存在本机');
-      });
-    }).catch(function () { saveStatus('本次打开期间会保留对比'); });
-    return saveQueue;
-  }
-
-  function scheduleSave() {
-    if (suppressSaves) return;
-    saveStatus('对比正在保存…');
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(flushSave, 180);
-  }
-
-  async function restoreWorkspace() {
-    try {
-      const record = await Staff.db.get(Staff.db.STORES.settings, WORKSPACE_KEY);
-      const saved = record && record.value;
-      if (!saved || saved.schema !== 1 || !saved.modes) return;
-      ['work', 'company'].forEach(function (mode) {
-        const raw = saved.modes[mode];
-        if (!raw || !Array.isArray(raw.panels) || raw.panels.length > MAX_PANELS) return;
-        const session = newSession(mode);
-        session.overlapScope = raw.overlapScope === 'all' ? 'all' : 'shared';
-        session.ui = raw.ui && Array.isArray(raw.ui.details) && Array.isArray(raw.ui.scrolls) ? raw.ui : null;
-        session.concurrency = Math.min(20, Math.max(1, Number(raw.concurrency) || 5));
-        session.interval = Math.max(0, Number(raw.interval) || 0);
-        session.panels = raw.panels.map(function (p, index) {
-          const subject = p.subject && p.subject.id && Array.isArray(p.subject.persons) ? p.subject : null;
-          const company = p.company && p.company.id && Array.isArray(p.company.works) && Array.isArray(p.company.worksAll) ? p.company : null;
-          return { key: nextKey++, index: index + 1, workType: TYPE_OPTIONS.some(function (t) { return t.code === p.workType; }) ? p.workType : 2,
-            query: typeof p.query === 'string' ? p.query : '', subject: subject, company: company, request: 0 };
-        });
-        sessions[mode] = session;
-      });
-      state = sessions[saved.activeMode === 'company' ? 'company' : 'work'];
-    } catch (err) { /* Storage may be unavailable; the in-memory workspace still works. */ }
-  }
-
-  function leave() { captureUi(); return flushSave(); }
+  function leave() { rememberUi(); }
 
   function cancelRun(session) {
     if (session.run) session.run.signal.cancelled = true;
     session.run = null;
   }
 
-  async function clearWorkspace() {
-    clearTimeout(saveTimer);
-    ++saveEpoch;
+  function clearWorkspace() {
+    clearTimeout(captureTimer);
     cancelRun(sessions.work);
     cancelRun(sessions.company);
     sessions.work = newSession('work');
     sessions.company = newSession('company');
     state = sessions.work;
-    suppressSaves = true;
+    suppressCaptures = true;
     if (workspaceRoot) { updateModeButtons(); resetPanels(); }
-    suppressSaves = false;
-    await saveQueue;
-    await Staff.db.remove(Staff.db.STORES.settings, WORKSPACE_KEY);
-    saveStatus('对比会自动保存在本机');
+    suppressCaptures = false;
   }
 
-  window.addEventListener('pagehide', flushSave);
   window.addEventListener('scroll', function () {
-    if (workspaceRoot && workspaceRoot.isConnected) scheduleSave();
+    if (workspaceRoot && workspaceRoot.isConnected) scheduleCapture();
   }, { passive: true });
 
   /* ============ 渲染入口 ============ */
@@ -165,7 +100,7 @@
       '  <button type="button" class="chip" id="mode-work">作品对比</button> ' +
       '  <button type="button" class="chip" id="mode-company">公司对比</button>' +
       '</div>' +
-      '<div class="compare-tools"><span id="cmp-save-status">对比会自动保存在本机</span><button class="btn secondary small" id="cmp-reset">清空本次对比</button></div>' +
+      '<div class="compare-tools"><span id="cmp-save-status">仅本次打开期间保留，切页不丢失；刷新或关闭后清空</span><button class="btn secondary small" id="cmp-reset">清空本次对比</button></div>' +
       '<div id="cmp-panels"></div>' +
       '<div id="cmp-action" style="margin-bottom:16px"></div>' +
       '<div id="cmp-result"></div>';
@@ -177,12 +112,12 @@
       cancelRun(state);
       state.ui = null;
       resetPanels();
-      flushSave();
+      rememberUi();
     });
-    workspaceRoot.addEventListener('input', scheduleSave);
-    workspaceRoot.addEventListener('change', scheduleSave);
-    workspaceRoot.addEventListener('toggle', scheduleSave, true);
-    workspaceRoot.addEventListener('scroll', scheduleSave, true);
+    workspaceRoot.addEventListener('input', scheduleCapture);
+    workspaceRoot.addEventListener('change', scheduleCapture);
+    workspaceRoot.addEventListener('toggle', scheduleCapture, true);
+    workspaceRoot.addEventListener('scroll', scheduleCapture, true);
     updateModeButtons();
     if (state.panels.length) { renderPanels(); renderResult(); applyUi(); }
     else resetPanels();
@@ -191,13 +126,13 @@
   function switchMode(mode) {
     if (state.mode === mode) return;
     captureUi();
-    flushSave();
+    rememberUi();
     state = sessions[mode];
     updateModeButtons();
     if (state.panels.length) { renderPanels(); renderResult(); applyUi(); }
     else resetPanels();
     afterRender();
-    scheduleSave();
+    scheduleCapture();
   }
 
   function updateModeButtons() {
@@ -286,7 +221,7 @@
     } else {
       const sel = card.querySelector('[data-type]');
       sel.value = p.workType;
-      sel.addEventListener('change', function () { p.workType = parseInt(sel.value, 10); scheduleSave(); });
+      sel.addEventListener('change', function () { p.workType = parseInt(sel.value, 10); scheduleCapture(); });
       card.querySelector('[data-rm]').addEventListener('click', function () {
         removePanel(p.key);
         renderPanels();
@@ -324,7 +259,7 @@
     });
 
     combo.setValue(p.query || '');
-    combo.input.addEventListener('input', function () { p.query = combo.input.value; scheduleSave(); });
+    combo.input.addEventListener('input', function () { p.query = combo.input.value; scheduleCapture(); });
 
     if (!isCompanyMode) {
       card.querySelector('[data-load-id]').addEventListener('click', function () {
@@ -395,14 +330,14 @@
       p.loading = false;
       p.loadingId = null;
       if (state === session) renderResult();
-      else scheduleSave();
+      else scheduleCapture();
     }).catch(function (err) {
       if (!isCurrent()) return;
       p.loading = false;
       p.loadingId = null;
       p.error = '加载失败：' + err.message;
       if (state === session) renderResult();
-      else scheduleSave();
+      else scheduleCapture();
     });
     function isCurrent() {
       return sessions[session.mode] === session && session.panels.includes(p) && p.request === request && !(Staff.runtime && Staff.runtime.isStopped());
@@ -425,13 +360,13 @@
         works: worksAll.filter(function (w) { return w.staff === '动画制作'; }), staff: null };
       p.loading = false;
       if (state === session) { renderPanels(); renderResult(); }
-      else scheduleSave();
+      else scheduleCapture();
     }).catch(function (err) {
       if (!isCurrent()) return;
       p.loading = false;
       p.error = '加载失败：' + err.message;
       if (state === session) { renderPanels(); renderResult(); }
-      else scheduleSave();
+      else scheduleCapture();
     });
     function isCurrent() {
       return sessions[session.mode] === session && session.panels.includes(p) && p.request === request && !(Staff.runtime && Staff.runtime.isStopped());
@@ -445,7 +380,7 @@
     if (!root || !action) return;
     if (state.mode === 'work') renderWorkResult(root, action);
     else renderCompanyResult(root, action);
-    scheduleSave();
+    scheduleCapture();
   }
 
   /* ============ 作品对比结果 ============ */
@@ -631,7 +566,7 @@
         p.company.staff = Staff.api.aggregateStaff(resFor, worksFor, null).filter(function (entry) { return entry.type !== 2; });
       });
       if (state === session) renderResult();
-      else scheduleSave();
+      else scheduleCapture();
     }).catch(function () {
       if (session.run !== task) return;
       session.run = null;
@@ -696,7 +631,7 @@
         '    <label class="small muted">间隔ms <input type="number" id="cmp-int" value="' + state.interval + '" min="0" style="width:80px;padding:4px 8px"></label>' +
         '    <button class="btn" id="cmp-run">开始对比（聚合各公司 staff）</button>' +
         '  </div>' +
-        '  <div class="small muted" style="margin-top:8px">对两家公司全部「动画制作」作品逐个抓取 staff。首次较慢；已统计过的作品会命中本地缓存。</div>' +
+        '  <div class="small muted" style="margin-top:8px">对两家公司全部「动画制作」作品逐个抓取 staff。首次较慢；本次已查询过的作品会复用临时缓存。</div>' +
         '</div>';
       action.querySelector('#cmp-run').addEventListener('click', runCompanyAggregation);
       cr.innerHTML = '';
@@ -797,5 +732,5 @@
   }
 
   Staff.views = Staff.views || {};
-  Staff.views.compare = { render: render, leave: leave, afterRender: afterRender, restoreWorkspace: restoreWorkspace, clearWorkspace: clearWorkspace, flushSave: flushSave };
+  Staff.views.compare = { render: render, leave: leave, afterRender: afterRender, clearWorkspace: clearWorkspace };
 })();

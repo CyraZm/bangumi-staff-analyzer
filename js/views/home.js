@@ -1,6 +1,13 @@
 /* 首页：从人物或公司进入分析。 */
 (function () {
+  let root = null, scroll = 0, generation = 0;
   function render(container) {
+    if (root) { container.appendChild(root); return; }
+    root = document.createElement('div');
+    root.className = 'home-workspace';
+    container.appendChild(root);
+    container = root;
+    const token = generation;
     const icon = Staff.ui.icon;
     container.innerHTML =
       '<section class="home-intro">' +
@@ -62,10 +69,10 @@
       result.innerHTML = Staff.ui.loading('正在搜索「' + Staff.ui.escapeHtml(keyword) + '」…');
       try {
         const persons = await Staff.api.searchPersons(keyword, '');
-        if (current !== requestId || !container.contains(result)) return;
+        if (token !== generation || current !== requestId || !container.contains(result)) return;
         renderResults(persons, keyword);
       } catch (err) {
-        if (current !== requestId || !container.contains(result) || err.cancelled) return;
+        if (token !== generation || current !== requestId || !container.contains(result) || err.cancelled) return;
         result.innerHTML = Staff.ui.empty('搜索失败：' + Staff.ui.escapeHtml(err.message));
       } finally {
         if (current === requestId) btn.disabled = false;
@@ -89,5 +96,10 @@
     }
   }
   Staff.views = Staff.views || {};
-  Staff.views.home = { render: render };
+  Staff.views.home = {
+    render: render,
+    leave: function () { if (root && root.isConnected) scroll = scrollY; },
+    afterRender: function () { requestAnimationFrame(function () { if (root && root.isConnected) scrollTo(0, scroll); }); },
+    clearWorkspace: function () { root = null; scroll = 0; generation++; }
+  };
 })();

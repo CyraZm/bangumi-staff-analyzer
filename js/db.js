@@ -85,5 +85,21 @@
     });
   }
 
-  Staff.db = { STORES: STORES, open: open, get: get, put: put, getAll: getAll, remove: remove, clear: clear };
+  // Remove results saved by older versions; new results and API responses stay in memory.
+  function discardSavedResults() {
+    return open().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction([STORES.cache, STORES.settings], 'readwrite');
+        tx.objectStore(STORES.cache).clear();
+        const settings = tx.objectStore(STORES.settings);
+        settings.delete('compare-workspace-v1');
+        settings.delete('team-workspace-v1');
+        tx.oncomplete = resolve;
+        tx.onabort = function () { reject(tx.error); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  Staff.db = { STORES: STORES, open: open, get: get, put: put, getAll: getAll, remove: remove, clear: clear, discardSavedResults: discardSavedResults };
 })();

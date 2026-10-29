@@ -1,4 +1,4 @@
-/* 本地应用生命周期。网页数据仍保留在原来的 localhost:8000。 */
+/* 本地应用生命周期；关闭时丢弃本次查询与分析。 */
 (function () {
   const button = document.getElementById('btn-shutdown');
   const status = document.getElementById('runtime-status');
@@ -22,10 +22,10 @@
 
   function showStopped(confirmed) {
     if (stopped) return;
-    if (Staff.views.compare) Promise.all([Staff.views.compare.flushSave(), Staff.views.team.flushSave()]);
     stopped = true;
     clearTimeout(timer);
     Staff.api.stopAll();
+    Object.values(Staff.views).forEach(function (view) { if (view.clearWorkspace) view.clearWorkspace(); });
     if (channel) channel.close();
     button.disabled = true;
     status.textContent = confirmed ? '应用已关闭' : '服务连接已断开';
@@ -42,8 +42,8 @@
     heading.textContent = confirmed ? '已结束本次探索。' : '与本地服务的连接已断开。';
     const message = document.createElement('p');
     message.textContent = confirmed
-      ? '后台服务与数据请求已停止，对比记录与班底分析仍保留在本机。可以关闭这个标签页，下次双击 Staff Analyzer 即可继续。'
-      : '当前页面的数据请求已暂停。请重新打开 Staff Analyzer，再刷新此页面继续使用。';
+      ? '后台服务与数据请求已停止，本次查询与分析已清空。可以关闭这个标签页，下次双击 Staff Analyzer 开始新的分析。'
+      : '当前页面的数据请求已停止，本次查询与分析已清空。请重新打开 Staff Analyzer，再刷新此页面继续使用。';
     const reload = document.createElement('button');
     reload.className = 'btn secondary';
     reload.textContent = '重新打开应用后，刷新页面';
@@ -84,7 +84,7 @@
         title: '当前以浏览器模式打开',
         content: '<p>此页面没有连接应用启动器，无法关闭手动启动的服务。以后请双击 <strong>Staff Analyzer.app</strong>，即可直接启动并在这里完整关闭。</p><p>现在可以停止本页面的数据请求，再关闭标签页。</p>',
         okText: '停止页面任务',
-        onOk: async function () { await Promise.all([Staff.views.compare.flushSave(), Staff.views.team.flushSave()]); showStopped(false); }
+        onOk: function () { showStopped(false); }
       });
       return;
     }
@@ -92,7 +92,6 @@
     button.disabled = true;
     status.textContent = '正在关闭…';
     try {
-      await Promise.all([Staff.views.compare.flushSave(), Staff.views.team.flushSave()]);
       const result = await request('shutdown', {
         method: 'POST',
         headers: { 'X-Staff-Token': session.token, 'Content-Type': 'application/json' },

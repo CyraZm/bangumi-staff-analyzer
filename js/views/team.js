@@ -1,9 +1,8 @@
-/* 制片人班底工作区：自动分析、依据查看和本地恢复。 */
+/* 制片人班底工作区：自动分析、依据查看和当次临时保留。 */
 (function () {
-  const KEY = 'team-workspace-v1';
   const model = Staff.teamModel;
   function defaults() { return { producer: null, works: [], selected: [], report: null, options: { force: false }, rulesVersion: model.VERSION, tier: 'all', keyword: '', sort: 'role', page: 1, scroll: 0 }; }
-  let state = defaults(), root = null, job = null, generation = 0, timer = null, epoch = 0, queue = Promise.resolve();
+  let state = defaults(), root = null, job = null, generation = 0, timer = null;
   const html = Staff.ui.escapeHtml;
   function q(selector) { return root && root.querySelector(selector); }
   function pct(value) { return value === null || value === undefined ? '未核实' : Math.round(value * 100) + '%'; }
@@ -17,34 +16,16 @@
     return Array.from(works.values());
   }
   function labelStatus(text) { const el = q('#team-save'); if (el) el.textContent = text; }
-  function flushSave() {
+  function rememberUi() {
     clearTimeout(timer);
-    if (!state.producer) return queue;
     if (root && root.isConnected) state.scroll = scrollY;
-    const value = { schema: 1, state: Object.assign({}, state) }, version = epoch;
-    queue = queue.catch(function () {}).then(function () { if (version === epoch) return Staff.db.put(Staff.db.STORES.settings, { key: KEY, value: value }); })
-      .then(function () { if (version === epoch) labelStatus(job ? '选择已保存，分析仍在进行' : (state.report ? '分析已保存在本机' : '选择已保存在本机')); }).catch(function () { labelStatus('本次打开期间保留分析'); });
-    return queue;
+    labelStatus(job ? '本次保留，分析仍在进行' : '仅本次打开期间保留，刷新或关闭后清空');
   }
-  function saveSoon() { clearTimeout(timer); timer = setTimeout(flushSave, 180); }
-  async function restoreWorkspace() {
-    try {
-      const rec = await Staff.db.get(Staff.db.STORES.settings, KEY);
-      if (rec && rec.value && rec.value.schema === 1 && rec.value.state && Array.isArray(rec.value.state.works) && Array.isArray(rec.value.state.selected)) {
-        state = Object.assign(defaults(), rec.value.state);
-        state.rulesVersion = rec.value.state.rulesVersion || 0;
-        state.options = { force: !!(state.options && state.options.force) };
-        if (state.report && state.report.engineVersion !== model.VERSION) state.report = null;
-        if (state.sort === 'span') state.sort = 'role';
-      }
-    } catch (err) { /* The in-memory workspace remains available. */ }
-  }
-  async function clearWorkspace() {
+  function rememberSoon() { clearTimeout(timer); timer = setTimeout(rememberUi, 180); }
+  function clearWorkspace() {
     if (job) job.cancelled = true;
-    job = null; ++generation; ++epoch; clearTimeout(timer); state = defaults();
+    job = null; ++generation; clearTimeout(timer); state = defaults();
     if (root) build();
-    await queue;
-    await Staff.db.remove(Staff.db.STORES.settings, KEY);
   }
   function afterRender() { requestAnimationFrame(function () { if (root && root.isConnected) scrollTo(0, state.scroll || 0); }); }
   function render(container, params) {
@@ -64,7 +45,7 @@
       '<section class="card team-search"><label for="team-search-input">选择动画制片人</label><div class="row"><div class="combo" id="team-combo"></div>' +
       '<button class="btn secondary" id="team-by-id">按 ID 载入</button></div><p class="small muted">搜索姓名，或输入人物链接 / ID。只分析本人明确担任动画制片人／制作制片人的作品。普通制片人、制作进行、企划等其他身份不纳入。</p>' +
       '<div class="row"><button class="example-chip" data-producer="27888">梅原翔太</button><button class="example-chip" data-producer="30844">福士裕一郎</button><button class="example-chip" data-producer="914">丸山正雄</button></div></section><div id="team-profile"></div><div id="team-options"></div>' +
-      '<div class="compare-tools"><span id="team-save">分析自动保存在本机</span><div class="row"><button class="btn secondary small" id="team-export-json" disabled>导出分析 JSON</button>' +
+      '<div class="compare-tools"><span id="team-save">仅本次打开期间保留，刷新或关闭后清空</span><div class="row"><button class="btn secondary small" id="team-export-json" disabled>导出分析 JSON</button>' +
       '<button class="btn secondary small" id="team-export-csv" disabled>导出名单 CSV</button></div></div><div id="team-progress" aria-live="polite"></div><div id="team-report"></div>';
     const combo = Staff.ui.combo(q('#team-combo'), { placeholder: '搜索动画制片人，如：梅原翔太',
       onSearch: function (keyword, done) { Staff.api.searchPersons(keyword, '').then(function (list) {
@@ -96,7 +77,7 @@
       state.selected = state.works.map(function (w) { return w.id; });
       q('#team-search-input').value = state.producer.name;
       q('#team-progress').innerHTML = '';
-      renderProfile(); renderOptions(); renderReport(); saveSoon();
+      renderProfile(); renderOptions(); renderReport(); rememberSoon();
     } catch (err) {
       if (token !== generation) return;
       q('#team-profile').innerHTML = '<p class="compare-error" role="alert">载入失败：' + html(err.message) + '</p>';
@@ -123,7 +104,7 @@
       '<p class="comparison-note">综合总合作数量、已知系列合并后的项目覆盖与近作参与。早期合作多、近作比例明显下降的署名会下调并标注；总集篇保留记录，但不重复抬高近作权重。</p>' +
       '<div class="row"><label class="small"><input type="checkbox" id="team-force" ' + (state.options.force ? 'checked' : '') + '> 重新获取资料</label><button class="btn" id="team-start">' + (state.report ? '重新分析全部制片作品' : '分析全部制片作品') + '</button><span class="small muted">全部 staff 都会展示；跨项目重复合作者全部核查外部履历，可随时取消。</span></div></section>';
     el.querySelectorAll('input,button').forEach(function (input) { input.disabled = !!job; });
-    q('#team-force').addEventListener('change', function () { state.options = { force: this.checked }; saveSoon(); });
+    q('#team-force').addEventListener('change', function () { state.options = { force: this.checked }; rememberSoon(); });
     q('#team-start').addEventListener('click', startAnalysis);
   }
   async function startAnalysis() {
@@ -144,7 +125,7 @@
         function (label, done, total) { if (token !== generation) return; q('#team-phase').textContent = label; q('#team-count').textContent = done + ' / ' + total;
           q('#team-progress .progress-bar i').style.width = (total ? Math.round(done / total * 100) : 100) + '%'; });
       if (token !== generation || signal.cancelled || (Staff.runtime && Staff.runtime.isStopped())) return;
-      state.report = report; state.tier = 'all'; state.page = 1; renderReport(); await flushSave();
+      state.report = report; state.tier = 'all'; state.page = 1; renderReport(); rememberUi();
     } catch (err) { if (token === generation && !err.cancelled) Staff.ui.toast('分析未完成：' + err.message, 'error'); }
     finally { if (token === generation) { job = null; q('#team-progress').innerHTML = ''; renderProfile(); renderOptions(); } }
   }
@@ -171,10 +152,10 @@
       '<div id="team-table"></div><div id="team-pagination" class="row"></div></section>';
     const tiers = [{ key: 'repeat', label: '重复合作', count: r.candidates.filter(function (c) { return c.count >= 2; }).length }].concat(Object.keys(model.TIERS).map(function (key) { return { key: key, label: model.TIERS[key], count: counts[key] }; }), [{ key: 'all', label: '全部含单次', count: r.candidates.length }]);
     q('#team-tiers').innerHTML = tiers.map(function (tier) { return '<button class="chip' + (state.tier === tier.key ? ' active' : '') + '" data-tier="' + tier.key + '" aria-pressed="' + (state.tier === tier.key) + '">' + tier.label + ' <strong>' + tier.count + '</strong></button>'; }).join('');
-    q('#team-tiers').querySelectorAll('[data-tier]').forEach(function (button) { button.addEventListener('click', function () { state.tier = button.dataset.tier; state.page = 1; renderReport(); saveSoon(); }); });
-    q('#team-filter').addEventListener('input', function () { state.keyword = this.value; state.page = 1; drawTable(); saveSoon(); });
+    q('#team-tiers').querySelectorAll('[data-tier]').forEach(function (button) { button.addEventListener('click', function () { state.tier = button.dataset.tier; state.page = 1; renderReport(); rememberSoon(); }); });
+    q('#team-filter').addEventListener('input', function () { state.keyword = this.value; state.page = 1; drawTable(); rememberSoon(); });
     q('#team-sort').value = state.sort;
-    q('#team-sort').addEventListener('change', function () { state.sort = this.value; state.page = 1; drawTable(); saveSoon(); });
+    q('#team-sort').addEventListener('change', function () { state.sort = this.value; state.page = 1; drawTable(); rememberSoon(); });
     drawTable();
   }
   function sampleList(works) {
@@ -212,8 +193,8 @@
     }); });
     const pagination = q('#team-pagination');
     pagination.innerHTML = '<span class="small muted">' + list.length + ' 项署名 · 第 ' + state.page + ' / ' + pages + ' 页</span><button class="btn secondary small" id="team-prev" ' + (state.page === 1 ? 'disabled' : '') + '>上一页</button><button class="btn secondary small" id="team-next" ' + (state.page === pages ? 'disabled' : '') + '>下一页</button>';
-    q('#team-prev').addEventListener('click', function () { state.page--; drawTable(); saveSoon(); });
-    q('#team-next').addEventListener('click', function () { state.page++; drawTable(); saveSoon(); });
+    q('#team-prev').addEventListener('click', function () { state.page--; drawTable(); rememberSoon(); });
+    q('#team-next').addEventListener('click', function () { state.page++; drawTable(); rememberSoon(); });
   }
   function download(data, extension, mime) {
     if (!state.report) return;
@@ -227,8 +208,7 @@
     }));
     download('\ufeff' + rows.map(function (row) { return row.map(cell).join(','); }).join('\r\n'), 'csv', 'text/csv');
   }
-  window.addEventListener('scroll', function () { if (root && root.isConnected) saveSoon(); }, { passive: true });
-  window.addEventListener('pagehide', flushSave);
+  window.addEventListener('scroll', function () { if (root && root.isConnected) rememberSoon(); }, { passive: true });
   Staff.views = Staff.views || {};
-  Staff.views.team = { render: render, restoreWorkspace: restoreWorkspace, clearWorkspace: clearWorkspace, flushSave: flushSave, leave: flushSave, afterRender: afterRender };
+  Staff.views.team = { render: render, clearWorkspace: clearWorkspace, leave: rememberUi, afterRender: afterRender };
 })();

@@ -74,7 +74,7 @@
         '  <button class="btn secondary small" id="set-clear-cache">清空 API 缓存</button>' +
         '  <button class="btn danger small" id="set-clear-all">清空全部本地数据</button>' +
         '</div>' +
-        '<div class="small muted" style="margin-top:10px">清空 API 缓存后，下次统计会重新从 Bangumi 拉取数据。</div>';
+        '<div class="small muted" style="margin-top:10px">结果与查询缓存仅在本次打开期间保留，刷新或关闭后清空。仅偏好设置保存在本机。</div>';
       const dlg = Staff.ui.modal({
         title: '设置',
         okText: '保存',
@@ -94,11 +94,12 @@
         }
       });
       holder.querySelector('#set-clear-cache').addEventListener('click', async function () {
-        await Staff.db.clear(Staff.db.STORES.cache);
+        Staff.api.clearCache();
         Staff.ui.toast('已清空 API 缓存', 'success');
       });
       holder.querySelector('#set-clear-all').addEventListener('click', async function () {
-        await Promise.all([views.compare.clearWorkspace(), views.team.clearWorkspace()]);
+        Object.values(views).forEach(function (view) { if (view.clearWorkspace) view.clearWorkspace(); });
+        Staff.api.clearCache();
         await Promise.all([
           Staff.db.clear(Staff.db.STORES.cache),
           Staff.db.clear(Staff.db.STORES.tags),
@@ -107,6 +108,8 @@
         ]);
         Staff.ui.toast('已清空全部本地数据', 'success');
         dlg.close();
+        activeView = null;
+        navigate();
       });
     });
   }
@@ -121,7 +124,7 @@
   Staff.app = { navigate: navigate, parseHash: parseHash, openSettings: openSettings };
 
   // 启动
-  Promise.all([loadSettings(), views.compare.restoreWorkspace(), views.team.restoreWorkspace()]).finally(function () {
+  Promise.all([loadSettings(), Staff.db.discardSavedResults().catch(function () {})]).finally(function () {
     navigate();
   });
 })();

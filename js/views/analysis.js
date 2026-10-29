@@ -11,23 +11,32 @@
     { code: 6, label: '三次元' },
     { code: 1, label: '书籍' }
   ];
+  const sessions = new Map();
+  let active = null;
 
   function displayName(item) { return item.name_cn || item.name || ('ID ' + item.id); }
 
   function render(container, params) {
-    const id = params.id;
-    container.innerHTML = '<div id="analysis-root">' + Staff.ui.loading('正在加载…') + '</div>';
-    const root = container.querySelector('#analysis-root');
+    const id = String(params.id || '');
+    if (sessions.has(id)) { active = sessions.get(id); container.appendChild(active.root); return; }
+    const root = document.createElement('div');
+    root.id = 'analysis-root';
+    root.innerHTML = Staff.ui.loading('正在加载…');
+    container.appendChild(root);
+    const session = { root: root, scroll: 0, signal: null, valid: true };
+    sessions.set(id, session); active = session;
 
     load();
 
     async function load() {
       try {
         const person = await Staff.api.getPerson(id);
+        if (!session.valid || (Staff.runtime && Staff.runtime.isStopped())) return;
         root.innerHTML = '';
         renderHeader(person);
         renderWorks(person);
       } catch (err) {
+        if (!session.valid || err.cancelled) return;
         root.innerHTML = Staff.ui.empty('加载失败：' + err.message + '。请检查 ID 是否正确。');
       }
     }
@@ -62,7 +71,9 @@
       let works;
       try {
         works = await Staff.api.getPersonSubjects(person.id);
+        if (!session.valid || (Staff.runtime && Staff.runtime.isStopped())) return;
       } catch (err) {
+        if (!session.valid || err.cancelled) return;
         worksCard.innerHTML = '<h3>参与作品</h3>' + Staff.ui.empty('获取作品失败：' + err.message);
         return;
       }
@@ -213,6 +224,7 @@
 
         startBtn.disabled = true;
         signal = { cancelled: false };
+        session.signal = signal;
         progressBox.querySelector('#ana-cancel').addEventListener('click', function () {
           if (signal) signal.cancelled = true;
         });
@@ -235,8 +247,9 @@
             text.textContent = done + ' / ' + total;
           }
         }).then(function (results) {
-          if (Staff.runtime && Staff.runtime.isStopped()) return;
+          if (!session.valid || (Staff.runtime && Staff.runtime.isStopped())) return;
           signal = null;
+          session.signal = null;
           startBtn.disabled = false;
           progressBox.style.display = 'none';
           const failed = results.filter(function (r) { return !r.ok; }).length;
@@ -444,5 +457,13 @@
   }
 
   Staff.views = Staff.views || {};
-  Staff.views.analysis = { render: render };
+  Staff.views.analysis = {
+    render: render,
+    leave: function () { if (active && active.root.isConnected) active.scroll = scrollY; },
+    afterRender: function () { const session = active; requestAnimationFrame(function () { if (active === session && session.root.isConnected) scrollTo(0, session.scroll); }); },
+    clearWorkspace: function () {
+      sessions.forEach(function (session) { session.valid = false; if (session.signal) session.signal.cancelled = true; });
+      sessions.clear(); active = null;
+    }
+  };
 })();
