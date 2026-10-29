@@ -6,7 +6,7 @@
       '<section class="home-intro">' +
       '  <div><div class="eyebrow">BEHIND THE CREDITS</div>' +
       '    <h2 class="home-title">每部作品背后，<br>都有值得认识的<em>创作者。</em></h2>' +
-      '    <p>从一个名字开始，探索参与作品、合作记录与制作人员的交集。</p></div>' +
+      '    <p>从一个名字开始，探索作品、合作轨迹与长期制作搭档。</p></div>' +
       '  <svg class="credit-art" viewBox="0 0 250 180" aria-hidden="true">' +
       '    <path d="M45 116H15V42h58M197 59h35v83h-56" fill="none" stroke="#ccd5c8" stroke-width="1.5" stroke-dasharray="4 4"/>' +
       '    <rect x="80" y="25" width="120" height="137" rx="9" fill="#e8e9e0" transform="rotate(10 140 90)"/>' +
@@ -36,8 +36,8 @@
       '  <div class="feature-grid">' +
       '    <button class="feature-card" id="explore-company" type="button"><div class="feature-top">' + icon('building') + '<span>01 / STUDIO</span></div>' +
       '      <h4>制作公司</h4><p>梳理公司的参与作品，<br>了解每位 staff 的职务与参与频率。</p><span class="feature-link">从公司开始 ' + icon('arrow') + '</span></button>' +
-      '    <button class="feature-card" id="explore-person" type="button"><div class="feature-top">' + icon('person') + '<span>02 / PEOPLE</span></div>' +
-      '      <h4>制作人员</h4><p>沿着创作者的作品轨迹，<br>查看与其他人的共事记录。</p><span class="feature-link">从人物开始 ' + icon('arrow') + '</span></button>' +
+      '    <a class="feature-card" href="#/team"><div class="feature-top">' + icon('person') + '<span>02 / TEAM</span></div>' +
+      '      <h4>制片人班底</h4><p>结合岗位与长期合作证据，<br>区分稳定搭档和高频外部合作。</p><span class="feature-link">分析制作班底 ' + icon('arrow') + '</span></a>' +
       '    <a class="feature-card" href="#/compare"><div class="feature-top">' + icon('compare') + '<span>03 / COMPARE</span></div>' +
       '      <h4>作品与公司对比</h4><p>并排比较多部作品或公司，<br>找到共同参与的制作人员。</p><span class="feature-link">开始对比 ' + icon('arrow') + '</span></a>' +
       '  </div>' +
@@ -53,7 +53,6 @@
       button.addEventListener('click', function () { input.value = button.dataset.search; doSearch(); });
     });
     container.querySelector('#explore-company').addEventListener('click', function () { input.placeholder = '搜索公司，如：京都动画、骨头社'; input.focus(); });
-    container.querySelector('#explore-person').addEventListener('click', function () { input.placeholder = '搜索人物，如：山田尚子、石原立也'; input.focus(); });
 
     async function doSearch() {
       const keyword = input.value.trim();

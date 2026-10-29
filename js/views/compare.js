@@ -550,9 +550,9 @@
     const headers = [{ key: 'name', label: '制作人员', sortable: false }];
     if (n > 2) headers.push({ key: 'count', label: '参与作品', sortable: false, num: true });
     loaded.forEach(function (p) { headers.push({ key: 'p' + p.key, label: '作品 ' + p.index + ' · ' + Staff.ui.escapeHtml(p.subject.name), sortable: false }); });
-    headers.push({ key: 'op', label: '收集', sortable: false });
+    headers.push({ key: 'op', label: '履历', sortable: false });
     const rows = shown.map(function (record) {
-      const cells = { name: productionName(record), count: record.count + ' / ' + n, op: collectButton(record) };
+      const cells = { name: productionName(record), count: record.count + ' / ' + n, op: historyLink(record) };
       loaded.forEach(function (p) {
         const presence = record.presences.find(function (pr) { return pr.key === p.key; });
         cells['p' + p.key] = presence ? relBadges(presence.relations) : '<span class="credit-absent">—</span>';
@@ -652,7 +652,9 @@
       r.count = r.presences.length;
       r.total = r.presences.reduce(function (s, pr) { return s + pr.entry.count; }, 0);
     });
-    return records;
+    return records.sort(function (a, b) {
+      return Staff.compareData.comparePriority({ name: a.name, count: a.total, relations: a.presences.flatMap(function (p) { return Array.from(p.entry.relations); }) }, { name: b.name, count: b.total, relations: b.presences.flatMap(function (p) { return Array.from(p.entry.relations); }) });
+    });
   }
 
   function renderCompanyResult(root, action) {
@@ -726,10 +728,10 @@
       { key: 'type', label: '类型', sortable: false }
     ];
     loaded.forEach(function (p) { headers.push({ key: 'p' + p.key, label: Staff.ui.escapeHtml(p.company.name), sortable: false }); });
-    headers.push({ key: 'op', label: '操作', sortable: false });
+    headers.push({ key: 'op', label: '履历', sortable: false });
     if (allOverlap.length) {
       const rows = allOverlap.map(function (r) {
-        const cells = { name: Staff.ui.personLink(r.id, r.name), type: Staff.ui.typeBadge(r.type), op: collectButton(r) };
+        const cells = { name: Staff.ui.personLink(r.id, r.name), type: Staff.ui.typeBadge(r.type), op: historyLink(r) };
         loaded.forEach(function (p) {
           const presence = r.presences.find(function (pr) { return pr.key === p.key; });
           cells['p' + p.key] = presence ? presenceCell(presence) : '<span class="muted small">—</span>';
@@ -748,9 +750,9 @@
       { key: 'cnt', label: '出现于 X/' + n + ' 家', sortable: false, num: true },
       { key: 'sum', label: '合计次数', sortable: false, num: true },
       { key: 'wn', label: '职务（合并）', sortable: false },
-      { key: 'op', label: '操作', sortable: false }
+      { key: 'op', label: '履历', sortable: false }
     ];
-    const rows2 = atLeast2.sort(function (a, b) { return b.total - a.total || b.count - a.count; }).map(function (r) {
+    const rows2 = atLeast2.sort(function (a, b) { return Staff.compareData.comparePriority({ name: a.name, count: a.total, relations: a.presences.flatMap(function (p) { return Array.from(p.entry.relations); }) }, { name: b.name, count: b.total, relations: b.presences.flatMap(function (p) { return Array.from(p.entry.relations); }) }); }).map(function (r) {
       const allRels = new Set();
       r.presences.forEach(function (pr) { pr.entry.relations.forEach(function (x) { allRels.add(x); }); });
       return {
@@ -760,7 +762,7 @@
           cnt: r.count + ' / ' + n,
           sum: r.total,
           wn: Array.from(allRels).slice(0, 6).map(function (x) { return Staff.ui.roleBadge(x); }).join(' '),
-          op: collectButton(r)
+          op: historyLink(r)
         },
         _person: r
       };
@@ -770,7 +772,7 @@
 
   /* ============ 共享工具 ============ */
   function relBadges(relations) {
-    const rels = Array.from(relations || []);
+    const rels = Array.from(relations || []).sort(function (a, b) { return Staff.compareData.roleRank(a) - Staff.compareData.roleRank(b); });
     if (!rels.length) return '<span class="muted small">—</span>';
     return rels.map(function (r) { return Staff.ui.roleBadge(r); }).join(' ');
   }
@@ -782,8 +784,8 @@
       (rels.length ? rels.map(function (x) { return Staff.ui.roleBadge(x); }).join(' ') : '<span class="muted small">—</span>');
   }
 
-  function collectButton(r) {
-    return '<button class="btn small" data-collect="' + r.id + '">收集</button>';
+  function historyLink(r) {
+    return '<a class="btn secondary small" href="#/analysis?id=' + r.id + '">参与作品</a>';
   }
 
   function renderTable(container, headers, rows) {
@@ -791,12 +793,7 @@
     container.innerHTML = '';
     container.appendChild(table.el);
     table.render({});
-    container.querySelectorAll('[data-collect]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        const rec = rows.find(function (r) { return String(r._person.id) === btn.dataset.collect; });
-        if (rec) Staff.ui.openTagModal({ id: rec._person.id, name: rec._person.name, type: rec._person.type });
-      });
-    });
+
   }
 
   Staff.views = Staff.views || {};

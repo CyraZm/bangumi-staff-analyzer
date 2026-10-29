@@ -82,7 +82,7 @@ test('multi-work analysis counts each person once per work and keeps partial ove
   const b = panel('b', [credit(1, '分镜'), credit(2, '音响监督')]);
   const c = panel('c', [credit(1, '摄影'), credit(3, '导演')]);
   const records = data.overlap([a, b, c]);
-  assert.deepEqual(Array.from(records, r => [r.id, r.count]), [[1, 3], [2, 2], [3, 1]]);
+  assert.deepEqual(Array.from(records, r => [r.id, r.count]), [[1, 3], [3, 1], [2, 2]]);
   assert.equal(records.filter(r => r.count === 3).length, 1);
   assert.equal(records.filter(r => r.count >= 2).length, 2);
 });

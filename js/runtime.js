@@ -22,7 +22,7 @@
 
   function showStopped(confirmed) {
     if (stopped) return;
-    if (Staff.views.compare) Staff.views.compare.flushSave();
+    if (Staff.views.compare) Promise.all([Staff.views.compare.flushSave(), Staff.views.team.flushSave()]);
     stopped = true;
     clearTimeout(timer);
     Staff.api.stopAll();
@@ -42,7 +42,7 @@
     heading.textContent = confirmed ? '已结束本次探索。' : '与本地服务的连接已断开。';
     const message = document.createElement('p');
     message.textContent = confirmed
-      ? '后台服务与数据请求已停止，你的收集和备注仍保留在本机。可以关闭这个标签页，下次双击 Staff Analyzer 即可继续。'
+      ? '后台服务与数据请求已停止，对比记录与班底分析仍保留在本机。可以关闭这个标签页，下次双击 Staff Analyzer 即可继续。'
       : '当前页面的数据请求已暂停。请重新打开 Staff Analyzer，再刷新此页面继续使用。';
     const reload = document.createElement('button');
     reload.className = 'btn secondary';
@@ -84,7 +84,7 @@
         title: '当前以浏览器模式打开',
         content: '<p>此页面没有连接应用启动器，无法关闭手动启动的服务。以后请双击 <strong>Staff Analyzer.app</strong>，即可直接启动并在这里完整关闭。</p><p>现在可以停止本页面的数据请求，再关闭标签页。</p>',
         okText: '停止页面任务',
-        onOk: async function () { await Staff.views.compare.flushSave(); showStopped(false); }
+        onOk: async function () { await Promise.all([Staff.views.compare.flushSave(), Staff.views.team.flushSave()]); showStopped(false); }
       });
       return;
     }
@@ -92,7 +92,7 @@
     button.disabled = true;
     status.textContent = '正在关闭…';
     try {
-      await Staff.views.compare.flushSave();
+      await Promise.all([Staff.views.compare.flushSave(), Staff.views.team.flushSave()]);
       const result = await request('shutdown', {
         method: 'POST',
         headers: { 'X-Staff-Token': session.token, 'Content-Type': 'application/json' },

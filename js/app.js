@@ -6,7 +6,7 @@
   function parseHash() {
     const raw = location.hash.replace(/^#\/?/, '') || 'home';
     const parts = raw.split('?');
-    const name = parts[0] || 'home';
+    const name = parts[0] === 'collections' ? 'team' : (parts[0] || 'home');
     const params = {};
     if (parts[1]) {
       new URLSearchParams(parts[1]).forEach(function (v, k) { params[k] = v; });
@@ -27,7 +27,7 @@
       if (active) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
     });
-    document.getElementById('route-label').textContent = { home: '探索与分析', analysis: '人物与公司分析', compare: '作品 / 公司对比', collections: '我的收集' }[route.name] || '页面不存在';
+    document.getElementById('route-label').textContent = { home: '探索与分析', analysis: '人物与公司分析', compare: '作品 / 公司对比', team: '制片人班底' }[route.name] || '页面不存在';
     if (!view) {
       main.innerHTML = Staff.ui.empty('页面不存在，<a href="#/home">返回首页</a>');
       return;
@@ -98,7 +98,7 @@
         Staff.ui.toast('已清空 API 缓存', 'success');
       });
       holder.querySelector('#set-clear-all').addEventListener('click', async function () {
-        await views.compare.clearWorkspace();
+        await Promise.all([views.compare.clearWorkspace(), views.team.clearWorkspace()]);
         await Promise.all([
           Staff.db.clear(Staff.db.STORES.cache),
           Staff.db.clear(Staff.db.STORES.tags),
@@ -121,7 +121,7 @@
   Staff.app = { navigate: navigate, parseHash: parseHash, openSettings: openSettings };
 
   // 启动
-  Promise.all([loadSettings(), views.compare.restoreWorkspace()]).finally(function () {
+  Promise.all([loadSettings(), views.compare.restoreWorkspace(), views.team.restoreWorkspace()]).finally(function () {
     navigate();
   });
 })();

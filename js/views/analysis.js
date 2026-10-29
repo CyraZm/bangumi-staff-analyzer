@@ -45,12 +45,9 @@
         '    <div class="muted small">' + (isCompany ? '制作公司' : '个人') + ' · Bangumi ID ' + person.id +
         ' · ' + Staff.ui.personLink(person.id, '查看 bgm 主页') + '</div>' +
         '  </div>' +
-        '  <button class="btn small" id="ana-collect">加入收集</button>' +
+        (!isCompany ? '  <a class="btn small" href="#/team?id=' + person.id + '">以此人为制片人分析</a>' : '') +
         '</div>' +
         (person.summary ? '<div class="small muted" style="margin-top:10px;max-height:120px;overflow-y:auto">' + Staff.ui.escapeHtml(person.summary) + '</div>' : '');
-      head.querySelector('#ana-collect').addEventListener('click', function () {
-        Staff.ui.openTagModal(person);
-      });
       root.appendChild(head);
     }
 
@@ -266,15 +263,15 @@
       }
       const totalWorks = works.length;
       let typeFilter = 'all'; // all / person / company
-      let sortKey = 'count';
-      let sortDesc = true;
+      let sortKey = 'role';
+      let sortDesc = false;
 
       // 职务集合与选中状态（默认全不选；未选择 = 显示全部）
       const relCount = {};
       agg.forEach(function (a) {
         a.relations.forEach(function (r) { relCount[r] = (relCount[r] || 0) + 1; });
       });
-      const relList = Object.keys(relCount).sort(function (x, y) { return relCount[y] - relCount[x]; });
+      const relList = Object.keys(relCount).sort(function (x, y) { return Staff.compareData.roleRank(x) - Staff.compareData.roleRank(y) || relCount[y] - relCount[x]; });
       const relState = {};
       relList.forEach(function (r) { relState[r] = false; });
       const REL_COLLAPSED = 10;
@@ -288,8 +285,9 @@
         (relList.length ? '<div class="small muted" style="margin-bottom:4px">职务筛选（未选择任何职务时显示全部；选中后只显示担任过任一选中职务的 staff）：</div>' +
           '<div class="row" style="margin-bottom:6px;flex-wrap:wrap" id="ana-rel-chips"></div>' +
           '<div class="row" style="margin-bottom:10px" id="ana-rel-actions"></div>' : '') +
-        '<div id="ana-table"></div>';
+        '<div class="row" style="margin-bottom:12px"><label class="small">结果排序 <select id="ana-order"><option value="role">岗位优先：导演→演出→分镜…</option><option value="count">合作次数优先</option><option value="name">姓名排序</option></select></label></div><div id="ana-table"></div>';
 
+      wrap.querySelector('#ana-order').addEventListener('change', function () { sortKey = this.value; sortDesc = sortKey === 'count'; draw(); });
       const chipsRow = wrap.querySelector('#ana-result-chips');
       [
         { code: 'all', label: '全部' },
@@ -383,7 +381,7 @@
       function relBadges(a) {
         const active = isRelActive();
         const rels = active ? Array.from(a.relations).filter(function (r) { return relState[r]; }) : Array.from(a.relations);
-        const sorted = rels.slice().sort(function (x, y) { return (a.relWork[y] || 0) - (a.relWork[x] || 0); });
+        const sorted = rels.slice().sort(function (x, y) { return Staff.compareData.roleRank(x) - Staff.compareData.roleRank(y) || (a.relWork[y] || 0) - (a.relWork[x] || 0); });
         return sorted.slice(0, 4).map(function (r) {
           return '<span class="badge-role">' + Staff.ui.escapeHtml(r) + '×' + (a.relWork[r] || 0) + '</span>';
         }).join(' ');
@@ -393,6 +391,7 @@
         let list = filtered();
         list.sort(function (a, b) {
           let r = 0;
+          if (sortKey === 'role') return Staff.compareData.comparePriority(a, b);
           if (sortKey === 'count') r = (relActive ? roleCountFor(a) : a.count) - (relActive ? roleCountFor(b) : b.count);
           else if (sortKey === 'name') r = (a.name || '').localeCompare(b.name || '', 'zh');
           if (r === 0) r = (a.name || '').localeCompare(b.name || '', 'zh');
@@ -410,7 +409,7 @@
           { key: 'type', label: '类型', sortable: false },
           { key: 'count', label: relActive ? '职务次数' : '出现次数', sortable: true, num: true },
           { key: 'wn', label: '职务', sortable: false },
-          { key: 'op', label: '操作', sortable: false }
+          { key: 'op', label: '履历', sortable: false }
         ];
         const rows = list.map(function (a) {
           const val = relActive ? roleCountFor(a) : a.count;
@@ -423,25 +422,20 @@
               type: Staff.ui.typeBadge(a.type),
               count: '<strong>' + val + '</strong> ' + (relActive ? '次' : '部'),
               wn: relBadges(a),
-              op: '<button class="btn small" data-collect="' + a.id + '">收集</button>'
+              op: '<a class="btn secondary small" href="#/analysis?id=' + a.id + '">参与作品</a>'
             },
             _a: a
           };
         });
         const table = Staff.ui.sortableTable(headers, rows, function (key) {
           if (sortKey === key) { sortDesc = !sortDesc; } else { sortKey = key; sortDesc = (key === 'name') ? false : true; }
+          wrap.querySelector('#ana-order').value = sortKey;
           draw();
         });
         target.innerHTML = '';
         target.appendChild(table.el);
         table.render({ key: sortKey, desc: sortDesc });
-        target.querySelectorAll('[data-collect]').forEach(function (btn) {
-          btn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            const a = agg.find(function (x) { return String(x.id) === btn.dataset.collect; });
-            if (a) Staff.ui.openTagModal({ id: a.id, name: a.name, type: a.type, career: Array.from(a.relations) });
-          });
-        });
+
       }
       draw();
       container.innerHTML = '';

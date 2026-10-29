@@ -19,6 +19,30 @@
   roleGroups.forEach(function (roles, index) {
     roles.forEach(function (role) { creativeRoles.set(normalize(role), index); });
   });
+  const priorityBands = [
+    ['总导演', '导演', '联合导演', '系列监督', '副导演', '动画导演'],
+    ['主演出', '演出', '演出助理', 'OP・ED 演出', 'Bank 分镜演出', 'Live 分镜演出', '剧中剧分镜演出'],
+    ['分镜', '分镜协力', '分镜抄写', 'OP・ED 分镜'],
+    ['系列构成', '副系列构成', '构成协力', '脚本', '脚本协力', '故事概念', '剧本协调'],
+    ['总作画监督', '作画监督', '作画监修', '总作画监督助理', '作画监督助理', '动作作画监督', '机械作画监督', '角色作画监督', '构图作画监督', '特效作画监督', '道具作画监督'],
+    ['人物设定', '副人物设定', '客座人物设定', '人物原案', '机械设定', '概念设计', '画面设计', '道具设计'],
+    ['动画制片人', '制作制片人', '总动画制片人', '制作统括', '制作管理', '制作管理助理', '设定制作', '设定制作助理', '制作进行', '制作进行协力'],
+    ['美术监督', '美术监督助理', '美术设计', '美术板', '背景美术', '美术', '色彩设计', '色彩设计助理', '色彩指定', '色彩检查', '色彩脚本'],
+    ['摄影监督', '摄影监督助理', 'CG 导演', '3DCG 导演', '技术导演', '视觉导演', '特技导演', '动作导演', '创意总监', '剪辑', '剪辑助理', '在线剪辑', '离线剪辑'],
+    ['音响监督', '配音监督', '音乐', '音乐监督', '音效', '录音', '录音助理', '整音', '音响', '音响制作担当'],
+    ['主动画师', '构图', '原画', '第二原画', '动画检查', '补间动画', '摄影', '3DCG', '3D 动画师', '上色', '上色检查', '数码绘图']
+  ];
+  const priorities = new Map();
+  priorityBands.forEach(function (band, i) { band.forEach(function (role, j) { priorities.set(normalize(role), i * 100 + j); }); });
+  function roleRank(role) {
+    const key = normalize(role);
+    return priorities.has(key) ? priorities.get(key) : (creativeRoles.has(key) ? 1100 + creativeRoles.get(key) : 2000);
+  }
+  function rankEntry(entry) {
+    const roles = entry.relations || entry.roles || [];
+    return Math.min.apply(null, Array.from(roles).map(roleRank).concat([2000]));
+  }
+  function comparePriority(a, b) { return rankEntry(a) - rankEntry(b) || (b.count || 0) - (a.count || 0) || String(a.name).localeCompare(String(b.name), 'zh'); }
   // 「制作助理」在官方定义中是 Associate Producer / 製作補佐，不能凭“助理”二字归为制作进行。
   const businessCredits = /企[画划劃]|製作|^制作$|制片|制作人|制作助理|宣传|宣傳|出品|发行|發行/;
 
@@ -119,7 +143,7 @@
     });
     const records = Array.from(byId.values());
     records.forEach(function (record) { record.count = record.presences.length; });
-    return records.sort(function (a, b) { return b.count - a.count || a.rank - b.rank; });
+    return records.sort(function (a, b) { return comparePriority({ relations: a.presences.flatMap(function (p) { return Array.from(p.relations); }), count: a.count, name: a.name }, { relations: b.presences.flatMap(function (p) { return Array.from(p.relations); }), count: b.count, name: b.name }); });
   }
 
   // 同一实体在同一作品有多项独立署名，也只算出现于一部作品。
@@ -133,5 +157,5 @@
   }
 
   window.Staff = window.Staff || {};
-  window.Staff.compareData = { splitCredits: splitCredits, overlap: overlap, separatePresence: separatePresence };
+  window.Staff.compareData = { splitCredits: splitCredits, overlap: overlap, separatePresence: separatePresence, roleRank: roleRank, rankEntry: rankEntry, comparePriority: comparePriority, isProductionRole: function (role) { return creativeRoles.has(normalize(role)); } };
 })();

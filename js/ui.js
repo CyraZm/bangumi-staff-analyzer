@@ -1,5 +1,5 @@
 /* bangumi-staff-analyzer 通用 UI 工具
- * toast / modal / 徽章 / 链接 / 表格排序 / 收藏弹窗
+ * toast / modal / 徽章 / 链接 / 表格排序
  */
 (function () {
   const ICONS = {
@@ -110,50 +110,6 @@
   }
   function roleBadge(role) {
     return role ? '<span class="badge-role">' + escapeHtml(role) + '</span>' : '';
-  }
-
-  /* ---------- 收藏（标记）数据 ---------- */
-  async function getTag(personId) {
-    try { return await Staff.db.get(Staff.db.STORES.tags, personId) || null; } catch (e) { return null; }
-  }
-  async function saveTag(record) {
-    await Staff.db.put(Staff.db.STORES.tags, record);
-  }
-  async function removeTag(personId) {
-    await Staff.db.remove(Staff.db.STORES.tags, personId);
-  }
-
-  // 弹出"加入收集"弹窗：设置标签 + 备注
-  function openTagModal(person, opts) {
-    opts = opts || {};
-    const holder = document.createElement('div');
-    holder.innerHTML =
-      '<div class="m-field"><label>名称</label><div style="font-weight:600">' + escapeHtml(person.name) +
-      typeBadge(person.type) + '</div></div>' +
-      '<div class="m-field"><label>标签（逗号分隔）</label>' +
-      '<input type="text" id="tag-input-tags" placeholder="如：演出, 关注中" style="width:100%"></div>' +
-      '<div class="m-field"><label>备注</label>' +
-      '<textarea id="tag-input-note" rows="3" style="width:100%" placeholder="记下关注的作品、职务或合作记录"></textarea></div>';
-    const dlg = modal({
-      title: '加入我的分类收集',
-      okText: '保存',
-      content: holder,
-      onOk: function () {
-        const tags = holder.querySelector('#tag-input-tags').value
-          .split(/[,，]/).map(function (s) { return s.trim(); }).filter(Boolean);
-        const note = holder.querySelector('#tag-input-note').value.trim();
-        return saveTag({
-          personId: person.id,
-          name: person.name,
-          type: person.type,
-          career: person.career || [],
-          tags: tags,
-          note: note,
-          updatedAt: Date.now()
-        }).then(function () { toast('已加入收集', 'success'); });
-      }
-    });
-    return dlg;
   }
 
   /* ---------- 可排序表格 ---------- */
@@ -315,10 +271,6 @@
     personLink: personLink,
     subjectLink: subjectLink,
     roleBadge: roleBadge,
-    getTag: getTag,
-    saveTag: saveTag,
-    removeTag: removeTag,
-    openTagModal: openTagModal,
     sortableTable: sortableTable,
     combo: combo,
     loading: function (text) {
