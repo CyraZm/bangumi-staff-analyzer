@@ -4,7 +4,7 @@ window.Staff = window.Staff || {};
 Staff.config = {
   apiBase: 'https://api.bgm.tv',
   appName: 'bangumi-staff-analyzer',
-  version: '1.9.0',
+  version: '1.9.1',
   searchLimit: 50,          // 搜索接口每页条数
   defaultConcurrency: 5,    // 默认并发请求数（1-20）
   defaultInterval: 200,     // 默认请求间隔 ms
