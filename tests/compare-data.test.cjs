@@ -10,18 +10,38 @@ const credit = (id, relation, type = 1) => ({ id, relation, type, name: 'staff-'
 const panel = (key, list) => ({ key, credits: data.splitCredits(list) });
 const ids = records => Array.from(records, record => record.id);
 
-test('production analysis includes on-site coordination but excludes funding, studios, groups and unknown roles', () => {
+test('production analysis includes people and creative groups but excludes funding, studios and unknown roles', () => {
   const source = [credit(1, '导演'), credit(2, '原画'), credit(3, '音响监督'),
     credit(4, '企画'), credit(5, '製作'), credit(6, '制作'), credit(7, '制作进行'),
     credit(8, '制片人'), credit(9, '设定制作'), credit(10, '原作'), credit(11, '未知职务'),
     credit(12, '音响', 2), credit(13, '音乐', 3), credit(14, '导演', 0),
     credit(15, '动画制作', 2), credit(16, '动画制片人')];
   const split = data.splitCredits(source);
-  assert.deepEqual(ids(split.creative.values()), [1, 2, 3, 7, 9]);
+  assert.deepEqual(ids(split.creative.values()), [1, 2, 3, 7, 9, 13]);
   assert.deepEqual(ids(split.studio), [15]);
   assert.deepEqual(ids(split.producer), [16]);
-  assert.equal(split.extra.length, 9);
+  assert.equal(split.extra.length, 8);
   assert.equal(split.sourceCount, source.length);
+});
+
+test('a group credited for direction and storyboard participates once and retains its group identity', () => {
+  const groupCredit = role => ({ id: 5780, name: '劇団イヌカレー', type: 3, relation: role });
+  const a = panel(1, [groupCredit('演出'), groupCredit('分镜'), groupCredit('演出'), groupCredit('企画')]);
+  const b = panel(2, [groupCredit('分镜')]);
+  const result = data.overlap([a, b]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0].type, 3);
+  assert.equal(result[0].count, 2);
+  assert.deepEqual(Array.from(result[0].presences[0].relations), ['演出', '分镜']);
+  assert.deepEqual(Array.from(a.credits.extra, entry => entry.relation), ['企画']);
+});
+
+test('production producer is included without treating an executive producer as that same role', () => {
+  const a = panel(1, [credit(1, '制作制片人'), credit(2, '执行制片人'), credit(3, '动画制片人')]);
+  const b = panel(2, [credit(1, '制作制片人')]);
+  assert.deepEqual(ids(data.overlap([a, b])), [1]);
+  assert.deepEqual(ids(a.credits.extra), [2]);
+  assert.deepEqual(ids(a.credits.producer), [3]);
 });
 
 test('production delivery roles participate, while similarly named business credits stay separate', () => {

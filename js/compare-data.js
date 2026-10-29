@@ -12,7 +12,7 @@
     ['摄影监督', '摄影监督助理', '摄影', 'CG 导演', 'CG 导演助理', '3DCG 导演', '3DCG 导演助理', '3DCG', '3D 动画师', '建模/模型', '视觉开发/外观开发', '特效', '视觉效果', '特摄效果', '剪辑', '剪辑助理', '在线剪辑', '离线剪辑'],
     ['音响监督', '配音监督', '音响', '音效', '录音', '录音助理', '整音', '音乐', '音乐监督', '音乐助理', '选曲', '主题歌作曲', '主题歌作词', '主题歌编曲', '主题歌演出', '插入歌作曲', '插入歌作词', '插入歌编曲', '插入歌演出'],
     // 制作现场的调度、发注和交付也是制作工作。注意「制作」与「製作」的区别。
-    ['制作进行', '制作进行协力', '制作管理', '制作管理助理', '设定制作', '设定制作助理', '制作统括', '制作事务', '制作协力', 'CG 制作进行', '美术制作进行', '音响制作担当', '剧本协调']
+    ['制作进行', '制作进行协力', '制作管理', '制作管理助理', '设定制作', '设定制作助理', '制作统括', '制作事务', '制作协力', '制作制片人', 'CG 制作进行', '美术制作进行', '音响制作担当', '剧本协调']
   ];
   const creativeRoles = new Map();
   function normalize(role) { return String(role || '').replace(/\s+/g, '').toLowerCase(); }
@@ -26,7 +26,7 @@
     const role = normalize(entry.relation);
     if (role === '动画制作' || role === '動畫製作') return 'studio';
     if (role === '动画制片人' || role === '動畫製片人') return 'producer';
-    if (entry.type === 1 && creativeRoles.has(role)) return 'creative';
+    if ((entry.type === 1 || entry.type === 3) && creativeRoles.has(role)) return 'creative';
     if (businessCredits.test(role)) return 'management';
     if (entry.type === 2 || entry.type === 3) return 'organization';
     return 'other';
@@ -111,7 +111,7 @@
     const byId = new Map();
     panels.forEach(function (panel) {
       panel.credits.creative.forEach(function (person, id) {
-        if (!byId.has(id)) byId.set(id, { id: id, name: person.name, type: 1, rank: person.rank, presences: [] });
+        if (!byId.has(id)) byId.set(id, { id: id, name: person.name, type: person.type, rank: person.rank, presences: [] });
         const record = byId.get(id);
         record.rank = Math.min(record.rank, person.rank);
         record.presences.push({ key: panel.key, relations: person.relations });

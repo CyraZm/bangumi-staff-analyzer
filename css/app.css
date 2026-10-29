@@ -239,7 +239,7 @@ table.data .mono { font-variant-numeric: tabular-nums; }
 .exclusive-card summary strong { white-space: nowrap; font-size: 13px; }
 .production-list { list-style: none; padding: 12px 0 0; margin: 12px 0 0; border-top: 1px solid var(--border); max-height: 400px; overflow-y: auto; }
 .production-list li { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
-.production-list li > a { flex: 0 0 150px; font-weight: 600; }
+.production-list li > span { flex: 0 0 150px; font-weight: 600; }
 .separate-credits { margin-top: 20px; border-top: 2px solid #a9b8c9; padding-top: 28px; }
 .source-order-note { font-size: 13px; border-left: 3px solid #c29337; background: #fff6e3; color: #694b1d; padding: 12px 15px; }
 .extra-table-wrap { border: 1px solid var(--border); border-radius: 10px; background: var(--card); }

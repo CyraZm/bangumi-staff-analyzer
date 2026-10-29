@@ -347,7 +347,7 @@
       const credits = p.credits || Staff.compareData.splitCredits(p.subject.persons, p.subject.infobox);
       box.innerHTML =
         '<div class="selected-work"><strong>' + Staff.ui.escapeHtml(p.subject.name) + '</strong> ' + Staff.ui.subjectLink(p.subject.id, 'Bangumi ↗') + '</div>' +
-        '<p class="work-credit-count"><strong>' + credits.creative.size + '</strong> 位制作人员纳入交集</p>' +
+        '<p class="work-credit-count"><strong>' + credits.creative.size + '</strong> 项制作署名纳入交集</p>' +
         '<div class="work-context">' +
         separateGroup('动画制作公司', credits.studio, p.separateCounts) +
         separateGroup('动画制片人', credits.producer, p.separateCounts) +
@@ -523,19 +523,19 @@
       '<section class="card production-overlap" aria-labelledby="overlap-heading">' +
       '<div class="comparison-heading"><div><span class="section-kicker">制作人员</span>' +
       '<h3 id="overlap-heading">' + (n === 1 ? '制作人员名单' : '制作人员交集') + '</h3></div>' +
-      '<span class="overlap-count">' + shown.length + '<small> 人</small></span></div>' +
-      '<p class="comparison-note">统计导演、作画、美术、摄影、声音，以及制作进行、制作管理、设定制作等现场岗位的个人。兼任企划等职务时，只计入其制作职务。</p>' +
+      '<span class="overlap-count">' + shown.length + '<small> 项署名</small></span></div>' +
+      '<p class="comparison-note">统计导演、分镜、演出、作画、声音，以及制作进行、制作管理、设定制作、制作制片人等现场岗位的个人与创作组合。组合按一个署名计数；兼任企划等职务时，只计其制作职务。</p>' +
       (n > 2 ? '<div class="overlap-scopes" role="group" aria-label="人员交集范围">' +
         '<button class="chip' + (state.overlapScope === 'shared' ? ' active' : '') + '" data-scope="shared" aria-pressed="' + (state.overlapScope === 'shared') + '">至少两部共同 <strong>' + shared.length + '</strong></button>' +
         '<button class="chip' + (state.overlapScope === 'all' ? ' active' : '') + '" data-scope="all" aria-pressed="' + (state.overlapScope === 'all') + '">全部共同 <strong>' + all.length + '</strong></button></div>' : '') +
-      (n >= 2 ? '<p class="comparison-summary">' + n + ' 部作品 · 合计 ' + records.length + ' 位制作人员 · 共同参与 ' + shared.length + ' 人 · 仅单部参与 ' + exclusive.length + ' 人</p>' : '<p class="comparison-summary">再选择一部作品，即可查看人员交集。</p>') +
+      (n >= 2 ? '<p class="comparison-summary">' + n + ' 部作品 · 合计 ' + records.length + ' 项制作署名 · 共同参与 ' + shared.length + ' 项 · 仅单部参与 ' + exclusive.length + ' 项</p>' : '<p class="comparison-summary">再选择一部作品，即可查看制作署名交集。</p>') +
       '<div id="cmp-work-matrix"></div></section>' +
       (n >= 2 ? '<section class="exclusive-section" aria-label="各作品独有制作人员"><h3 class="comparison-subheading">仅参与其中一部的制作人员</h3><div class="compare-grid">' + loaded.map(function (p) {
         const persons = exclusive.filter(function (r) { return r.presences[0].key === p.key; }).map(function (r) { return p.credits.creative.get(r.id); });
-        return '<details class="card exclusive-card"><summary><span>作品 ' + p.index + ' · ' + Staff.ui.escapeHtml(p.subject.name) + '</span><strong>' + persons.length + ' 人</strong></summary>' + productionList(persons) + '</details>';
+        return '<details class="card exclusive-card"><summary><span>作品 ' + p.index + ' · ' + Staff.ui.escapeHtml(p.subject.name) + '</span><strong>' + persons.length + ' 项署名</strong></summary>' + productionList(persons) + '</details>';
       }).join('') + '</div></section>' : '') +
       '<section class="separate-credits" aria-labelledby="extra-heading"><div class="comparison-heading"><div><span class="section-kicker">独立署名 · 不计入交集</span><h3 id="extra-heading">企划、出品与其他署名</h3></div></div>' +
-      '<p class="comparison-note">企划、製作、出品及一般制片等在此列出，公司、组合与未识别职务也保留在这里。重合项在各作品中同步标记。</p>' +
+      '<p class="comparison-note">企划、製作、出品及一般制片等在此列出，公司与未纳入制作范围的其他署名也保留在这里。重合项在各作品中同步标记。</p>' +
       '<p class="source-order-note">优先按条目信息框署名排列，编号不因重合改变；无法对应时标注「顺序未核实」，沿用关联接口顺序。不按姓名或重合人数重排，也不据此推断投资比例。</p>' +
       extraTable(loaded, counts) + '</section>';
 
@@ -544,7 +544,7 @@
     });
     const matrix = root.querySelector('#cmp-work-matrix');
     if (!shown.length) {
-      matrix.innerHTML = Staff.ui.empty(n === 1 ? '这部作品暂无符合制作职务范围的个人署名；其他署名仍保留在上下方。' : (state.overlapScope === 'all' && n > 2 ? '没有同时参与全部作品的制作人员，可切换「至少两部共同」查看。' : '暂无符合制作职务范围的共同人员；独立署名仍可在上下方比较。'));
+      matrix.innerHTML = Staff.ui.empty(n === 1 ? '这部作品暂无符合制作职务范围的个人或创作组合署名；其他署名仍保留在上下方。' : (state.overlapScope === 'all' && n > 2 ? '没有同时参与全部作品的制作署名，可切换「至少两部共同」查看。' : '暂无符合制作职务范围的共同署名；独立署名仍可在上下方比较。'));
       return;
     }
     const headers = [{ key: 'name', label: '制作人员', sortable: false }];
@@ -552,7 +552,7 @@
     loaded.forEach(function (p) { headers.push({ key: 'p' + p.key, label: '作品 ' + p.index + ' · ' + Staff.ui.escapeHtml(p.subject.name), sortable: false }); });
     headers.push({ key: 'op', label: '收集', sortable: false });
     const rows = shown.map(function (record) {
-      const cells = { name: Staff.ui.personLink(record.id, record.name), count: record.count + ' / ' + n, op: collectButton(record) };
+      const cells = { name: productionName(record), count: record.count + ' / ' + n, op: collectButton(record) };
       loaded.forEach(function (p) {
         const presence = record.presences.find(function (pr) { return pr.key === p.key; });
         cells['p' + p.key] = presence ? relBadges(presence.relations) : '<span class="credit-absent">—</span>';
@@ -569,8 +569,12 @@
   function productionList(persons) {
     if (!persons.length) return '<p class="credit-missing">没有独有制作人员</p>';
     return '<ul class="production-list">' + persons.map(function (person) {
-      return '<li>' + Staff.ui.personLink(person.id, person.name) + '<div>' + relBadges(person.relations) + '</div></li>';
+      return '<li><span>' + productionName(person) + '</span><div>' + relBadges(person.relations) + '</div></li>';
     }).join('') + '</ul>';
+  }
+
+  function productionName(person) {
+    return Staff.ui.personLink(person.id, person.name) + (person.type === 3 ? ' ' + Staff.ui.typeBadge(3) : '');
   }
 
   /* ============ 公司对比结果 ============ */
