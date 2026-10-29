@@ -98,6 +98,8 @@
   /* ---------- 徽章 / 链接 ---------- */
   function typeBadge(type) {
     if (type === 2) return '<span class="badge badge-co">公司</span>';
+    if (type === 3) return '<span class="badge badge-co">组合</span>';
+    if (type !== 1) return '<span class="badge badge-role">类型未标注</span>';
     return '<span class="badge badge-person">个人</span>';
   }
   function personLink(id, name) {
