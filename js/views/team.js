@@ -43,7 +43,7 @@
     root.innerHTML = '<div class="team-page-head"><div><span class="section-kicker">从制片人出发</span><h2 class="page-title">寻找长期合作的制作班底</h2>' +
       '<p class="page-desc">分析全部制片作品与合作署名，结合总合作数量和近作权重，区分当前搭档、广泛合作与近作减少的历史关系。</p></div><span class="team-mark" aria-hidden="true">TEAM<br>NOTES</span></div>' +
       '<section class="card team-search"><label for="team-search-input">选择动画制片人</label><div class="row"><div class="combo" id="team-combo"></div>' +
-      '<button class="btn secondary" id="team-by-id">按 ID 载入</button></div><p class="small muted">搜索姓名，或输入人物链接 / ID。只分析本人明确担任动画制片人／制作制片人的作品。普通制片人、制作进行、企划等其他身份不纳入。</p>' +
+      '<button class="btn secondary" id="team-by-id">按 ID 载入</button></div><p class="small muted">搜索姓名，或输入人物链接 / ID。主要判断只用明确动画制片人／制作制片人作品；制作进行等其他现场岗位的共事另作辅助，不增加制片合作次数。</p>' +
       '<div class="row"><button class="example-chip" data-producer="27888">梅原翔太</button><button class="example-chip" data-producer="30844">福士裕一郎</button><button class="example-chip" data-producer="914">丸山正雄</button></div></section><div id="team-profile"></div><div id="team-options"></div>' +
       '<div class="compare-tools"><span id="team-save">仅本次打开期间保留，刷新或关闭后清空</span><div class="row"><button class="btn secondary small" id="team-export-json" disabled>导出分析 JSON</button>' +
       '<button class="btn secondary small" id="team-export-csv" disabled>导出名单 CSV</button></div></div><div id="team-progress" aria-live="polite"></div><div id="team-report"></div>';
@@ -90,18 +90,18 @@
     const reportWorks = state.report ? state.report.projects : [];
     el.innerHTML = '<section class="card"><div class="comparison-heading"><div><h3>' + html(state.producer.name) + ' ' + Staff.ui.typeBadge(state.producer.type) + '</h3>' +
       '<p class="small muted">' + Staff.ui.personLink(state.producer.id, 'Bangumi 资料 ↗') + ' · 全部 ' + state.works.length + ' 部明确动画/制作制片作品</p></div></div>' +
-      '<p class="small muted">动画制片人、制作制片人与普通制片人分别处理，仅前两种身份进入本次班底分析。</p>' +
+      '<p class="small muted">核心判断基于明确的动画/制作制片身份；其他现场制作岗位只作辅助，普通制片人、企划等不代替动画制片身份。</p>' +
       (!state.works.length ? '<p>没有找到明确动画/制作制片署名的作品，不会用普通制片人或制作进行等身份代替。</p>' :
       '<details class="team-samples"><summary>全部制片样本 · ' + state.works.length + ' 部（自动纳入，无需手动筛选）</summary>' +
       '<ul class="team-evidence-list">' + state.works.map(function (w) { const verified = reportWorks.find(function (r) { return r.id === w.id; }); return '<li>' + Staff.ui.subjectLink(w.id, w.name) + '<span>' + html(w.roles.join('、')) + (verified ? ' · 核实署名：' + html(verified.anchorRoles.join('、')) : '') + '</span></li>'; }).join('') + '</ul></details>') +
       (state.otherProducerWorks && state.otherProducerWorks.length ? '<details class="team-method" style="margin-top:14px"><summary>其他制片称谓 · ' + state.otherProducerWorks.length + ' 部未纳入</summary><p class="small muted">普通制片人等称谓不能自动等同于动画制作班底的负责人，保留原始履历供核对，不参与计算。</p><ul class="team-evidence-list">' + state.otherProducerWorks.map(function (w) { return '<li>' + Staff.ui.subjectLink(w.id, w.name) + '<span>' + html(w.roles.join('、')) + ' · 不参与班底计算</span></li>'; }).join('') + '</ul></details>' : '') +
-      (other.length ? '<details class="team-method" style="margin-top:14px"><summary>其他身份不纳入班底样本</summary><p class="small muted">' + other.map(function (role) { return html(role) + ' ' + state.otherRoles[role] + ' 条'; }).join(' · ') + '</p><p class="small muted">逐片核对动画/制作制片岗位，不按首次当制片人的年份把其他岗位作品一并算入。</p></details>' : '') + '</section>';
+      (other.length ? '<details class="team-method" style="margin-top:14px"><summary>其他身份 · 与制片样本分开</summary><p class="small muted">' + other.map(function (role) { return html(role) + ' ' + state.otherRoles[role] + ' 条'; }).join(' · ') + '</p><p class="small muted">制作进行、制作管理等现场岗位可核对已有候选的共事线索，仅加少量辅助分；企划与资方身份不作班底依据。</p></details>' : '') + '</section>';
   }
   function renderOptions() {
     const el = q('#team-options');
     if (!state.producer || !state.works.length) { el.innerHTML = ''; return; }
     el.innerHTML = '<section class="card team-conditions"><div class="comparison-heading"><h3>全部作品，近作权重更高</h3><span class="small muted">不使用年份跨度筛选</span></div>' +
-      '<p class="comparison-note">综合总合作数量、已知系列合并后的项目覆盖与近作参与。早期合作多、近作比例明显下降的署名会下调并标注；总集篇保留记录，但不重复抬高近作权重。</p>' +
+      '<p class="comparison-note">综合总合作、主要岗位的合作集中度与延续证据。导演等岗位重复合作且仍有近作/待播合作，可直接进入核心候选；其他岗位共事只作少量辅助加分。</p>' +
       '<div class="row"><label class="small"><input type="checkbox" id="team-force" ' + (state.options.force ? 'checked' : '') + '> 重新获取资料</label><button class="btn" id="team-start">' + (state.report ? '重新分析全部制片作品' : '分析全部制片作品') + '</button><span class="small muted">全部 staff 都会展示；跨项目重复合作者全部核查外部履历，可随时取消。</span></div></section>';
     el.querySelectorAll('input,button').forEach(function (input) { input.disabled = !!job; });
     q('#team-force').addEventListener('change', function () { state.options = { force: this.checked }; rememberSoon(); });
@@ -123,7 +123,7 @@
       state.otherRoles = credits.filter(function (w) { return w.type === 2 && !model.isAnchor(w.staff); }).reduce(function (all, w) { all[w.staff] = (all[w.staff] || 0) + 1; return all; }, {});
       const report = await Staff.teamLoader.run(state.producer, refs, Object.assign({}, state.options, { concurrency: Staff.api.defaultLimiter.concurrency, interval: Staff.api.defaultLimiter.interval }), signal,
         function (label, done, total) { if (token !== generation) return; q('#team-phase').textContent = label; q('#team-count').textContent = done + ' / ' + total;
-          q('#team-progress .progress-bar i').style.width = (total ? Math.round(done / total * 100) : 100) + '%'; });
+          q('#team-progress .progress-bar i').style.width = (total ? Math.round(done / total * 100) : 100) + '%'; }, credits);
       if (token !== generation || signal.cancelled || (Staff.runtime && Staff.runtime.isStopped())) return;
       state.report = report; state.tier = 'all'; state.page = 1; renderReport(); rememberUi();
     } catch (err) { if (token === generation && !err.cancelled) Staff.ui.toast('分析未完成：' + err.message, 'error'); }
@@ -141,10 +141,12 @@
       '<p class="comparison-note">判定是公开署名支持的候选关系，不能证明固定雇佣或私下合作。近作窗口为最近 ' + r.recentIds.length + ' 部非总集篇作品；日期只用于辅助排序，不按年份跨度判断。</p>' +
       '<p class="small muted">已核对 ' + r.checks.profilesSucceeded + ' / ' + r.checks.eligiblePeople + ' 位跨项目合作者的全部公开动画制作履历。未完成核查者不会凭合作次数升级为核心候选。</p>' +
       ((!r.quality.staffComplete || !r.quality.relationsComplete || !r.quality.orderComplete) ? '<p class="source-order-note">部分人员表、系列关系或相对顺序未核实。本次不升级核心候选，也不对未知顺序强行标注近作减少。</p>' : '') + '</section>' +
-      '<details class="card team-method"><summary>判断规则与全部样本依据</summary><p>所有制片作品都纳入记录。近作权重按作品次序递减：每向前 3 部权重减半，不比较相隔几年。相同发布日期取相同权重，总集篇不抬高近作权重。</p>' +
-      '<p>核心候选要求至少 3 组项目、近作加权覆盖至少 55%、最近作品至少参与两部且覆盖近作一半，并核对其全部公开动画制作履历中的合作集中度至少 25%。全部样本均需逐片确认动画/制作制片身份。</p>' +
-      '<p>只有原画等参与型署名时门槛提高为至少 4 组、加权覆盖 70%、合作集中度 50%。广泛参与其他作品且只靠累计次数多的署名不直接当作核心。近作参与比例降到早期一半及以下且早期有重复合作时，会标注「近作合作减少」并下调。</p>' +
-      '<p>日期仅近似作品公开发布先后，不能代表开工时间和实际合作时长。普通制片人、执行制片人、企划、制作进行等其他身份完全排除。多人共同担任动画制片人的作品也不能证明 staff 独属于某一人。</p>' +
+      '<p class="small muted">另核对主要岗位履历 ' + r.checks.roleWorksSucceeded + ' / ' + r.checks.roleWorksRequested + ' 部；其他现场岗位作品 ' + r.checks.auxiliaryWorks + ' 部（人员表未核实 ' + r.checks.auxiliaryFailed + ' 部），仅作辅助。</p>' +
+      '<details class="card team-method"><summary>判断规则与全部样本依据</summary><p>主要岗位与整体覆盖分别判断。导演岗位跨至少 2 组项目合作 3 部、占其导演履历至少一半，或跨 3 组合作 5 部且占比至少 30%；仍有可核实的近作/待播同岗位合作，可成为核心候选。其他主要岗位相应为 4 部/3 组/50%，或 6 部/4 组/30%。</p>' +
+      '<p>主要岗位集中度只比较此人担任该类岗位的作品，不把其原画、补间等全部经历混进导演分母。延续核对其最近两部同岗位作品、制片人最近三部同岗位机会及已公布待播合作；有明确平台时参照其已合作平台，不要求导演参加每部 PV。</p>' +
+      '<p>整体覆盖路径仍要求至少 3 组、近作加权覆盖 55%、近作至少两部且比例至少 50%、全履历集中度 25%；只有原画等参与署名提高为 4 组/70%/50%。近作按作品次序加权，不使用相隔年数，总集篇不抬高权重。</p>' +
+      '<p>总体比例下降是另一条信息；主要岗位或已公布合作仍在延续时，不据此直接下调核心。其他现场岗位共事每部辅助 +1，上限 5，仅在同岗位同类别内小幅影响排序，不能跨过核心门槛。普通制片人与企划/资方身份不代替动画制片身份。</p>' +
+      '<p>日期仅辅助排列公开作品，不能代表开工时间和合作持续时长；待播署名是已公布合作证据，不代表成片已完成。共同署名也不能证明由哪位制片人邀约或固定雇佣。</p>' +
       '<h4>近作窗口</h4>' + sampleList(r.projects.filter(function (p) { return r.recentIds.includes(p.id); })) + '<h4>全部纳入作品</h4>' + sampleList(r.projects) +
       (r.excluded.length ? '<h4>未能核实</h4><ul>' + r.excluded.map(function (w) { return '<li>' + Staff.ui.subjectLink(w.id, w.name) + ' · ' + html(w.reason) + '</li>'; }).join('') + '</ul>' : '') + '</details>' +
       '<section class="card"><div class="team-filter-row" id="team-tiers"></div><div class="row team-table-tools"><input type="search" id="team-filter" aria-label="筛选合作人员或职务" placeholder="筛选姓名或职务" value="' + html(state.keyword) + '">' +
@@ -170,7 +172,7 @@
       if (state.sort === 'coverage') return b.weightedCoverage - a.weightedCoverage || Staff.compareData.comparePriority(a, b);
       if (state.sort === 'groups') return b.groupCount - a.groupCount || Staff.compareData.comparePriority(a, b);
       if (state.sort === 'count') return b.count - a.count || Staff.compareData.comparePriority(a, b);
-      return Number(a.trend === 'down') - Number(b.trend === 'down') || Staff.compareData.rankEntry(a) - Staff.compareData.rankEntry(b) || tierOrder[a.tier] - tierOrder[b.tier] || b.weightedCoverage - a.weightedCoverage || b.count - a.count;
+      return Number(a.trend === 'down') - Number(b.trend === 'down') || Staff.compareData.rankEntry(a) - Staff.compareData.rankEntry(b) || tierOrder[a.tier] - tierOrder[b.tier] || b.rankingSupport - a.rankingSupport || b.count - a.count;
     });
   }
   function drawTable() {
@@ -178,13 +180,15 @@
     state.page = Math.min(Math.max(1, state.page), pages);
     const shown = list.slice((state.page - 1) * size, state.page * size);
     q('#team-table').innerHTML = !shown.length ? Staff.ui.empty('当前筛选下没有合作署名。可切换范围或查看单次参与。') :
-      '<div class="table-wrap team-table-wrap" tabindex="0" role="region" aria-label="制片人合作结构，可横向滚动"><table class="data team-table"><thead><tr><th>制作人员 / 组合</th><th>主要制作职务</th><th>合作</th><th>项目组</th><th>总项目覆盖</th><th>近作参与</th><th>近作加权覆盖</th><th>全履历集中度</th><th>判断</th><th>依据</th></tr></thead><tbody>' + shown.map(function (c) {
+      '<div class="table-wrap team-table-wrap" tabindex="0" role="region" aria-label="制片人合作结构，可横向滚动"><table class="data team-table"><thead><tr><th>制作人员 / 组合</th><th>主要制作职务</th><th>合作</th><th>项目组</th><th>总项目覆盖</th><th>近作参与</th><th>近作加权覆盖</th><th>主要岗位 / 全履历集中度</th><th>判断</th><th>依据</th></tr></thead><tbody>' + shown.map(function (c) {
         const a = c.activity;
         return '<tr data-team-person="' + c.id + '"><td>' + Staff.ui.personLink(c.id, c.name) + (c.type === 3 ? ' ' + Staff.ui.typeBadge(3) : '') + '</td><td>' + c.roles.slice(0, 4).map(Staff.ui.roleBadge).join(' ') + '</td>' +
-          '<td>' + c.count + ' 部</td><td>' + c.groupCount + ' 组</td><td>' + pct(c.coverage) + '</td><td>' + c.recent + ' / ' + c.recentTotal + (c.trend === 'down' ? '<br><strong class="trend-down">近作减少</strong>' : (c.trend === 'new' ? '<br>近作加入' : '')) + '</td><td>' + pct(c.weightedCoverage) + '</td><td>' + (a.checked ? pct(a.share) : '未核实') + '</td>' +
+          '<td>' + c.count + ' 部' + (c.auxiliary.length ? '<br><span class="small muted">另 ' + c.auxiliary.length + ' 部参考 · +' + c.auxiliaryBonus + '</span>' : '') + '</td><td>' + c.groupCount + ' 组</td><td>' + pct(c.coverage) + '</td><td>' + c.recent + ' / ' + c.recentTotal + (c.trend === 'down' ? '<br><strong class="trend-down">近作减少</strong>' : (c.trend === 'continued' ? '<br><strong>主要合作延续</strong>' : (c.trend === 'new' ? '<br>近作加入' : ''))) + '</td><td>' + pct(c.weightedCoverage) + '</td><td>' + (c.mainRole ? html(c.mainRole.label) + ' ' + c.mainRole.shared + '/' + c.mainRole.total + '<br><strong>' + pct(c.mainRole.share) + '</strong><br><span class="small muted">全履历 ' + pct(a.share) + '</span>' : (a.checked ? pct(a.share) : '未核实')) + '</td>' +
           '<td><span class="team-tier tier-' + c.tier + '">' + model.TIERS[c.tier] + '</span></td><td><button class="btn secondary small" data-evidence="' + c.id + '" aria-expanded="false">查看依据</button></td></tr>' +
           '<tr class="team-evidence" id="team-evidence-' + c.id + '" hidden><td colspan="10"><div class="team-evidence-grid"><div><h4>判定依据</h4><ul>' + c.reasons.map(function (reason) { return '<li>' + html(reason) + '</li>'; }).join('') + '</ul>' +
           '<p>早期作品 ' + c.earlier + ' / ' + c.earlierTotal + ' 部，近作 ' + c.recent + ' / ' + c.recentTotal + ' 部。' + (a.checked ? '全部公开动画制作履历 ' + a.total + ' 部，与本制片人合作 ' + c.count + ' 部。' : '尚未完成外部履历核查。') + '</p>' +
+          (c.mainRole ? '<p><strong>' + html(c.mainRole.label) + '岗位：' + c.mainRole.shared + ' / ' + c.mainRole.total + ' 部 · ' + pct(c.mainRole.share) + '</strong>，跨 ' + c.mainRole.groups + ' 组项目。' + (c.mainRole.upcomingIds.length ? '已有 ' + c.mainRole.upcomingIds.length + ' 部已公布待播合作。' : '') + '</p><details><summary>核对该类岗位的全部 ' + c.mainRole.total + ' 部履历</summary><ul class="team-evidence-list">' + c.mainRole.works.map(function (w) { return '<li>' + Staff.ui.subjectLink(w.id, w.name) + '<span>' + html(w.date || '排序资料未核实') + ' · ' + (c.mainRole.sharedIds.includes(w.id) ? '本制片人合作' : '其他合作') + ' · ' + html((w.scopes || []).length ? w.scopes.map(function (r) { return r.role + (r.eps ? '（范围：' + r.eps + '）' : ''); }).join('、') : w.roles.join('、')) + '</span></li>'; }).join('') + '</ul></details>' : '') +
+          (c.auxiliary.length ? '<details><summary>其他制作岗位共事 · ' + c.auxiliary.length + ' 部（仅辅助 +' + c.auxiliaryBonus + '）</summary><p>不计入上面的制片合作、项目覆盖或核心门槛，也不能据此认定谁邀请了谁。</p><ul class="team-evidence-list">' + c.auxiliary.map(function (w) { return '<li>' + Staff.ui.subjectLink(w.id, w.name) + '<span>' + html(w.date || '日期未知') + ' · ' + html(r.producer.name) + '：' + html(w.producerScopes.length ? w.producerScopes.map(function (r) { return r.role + (r.eps ? '（' + r.eps + '）' : ''); }).join('、') : w.producerRoles.join('、')) + '<br>' + html(c.name) + '：' + html(w.roles.join('、')) + '</span></li>'; }).join('') + '</ul></details>' : '') +
           '<a href="#/analysis?id=' + c.id + '">查看此人的全部参与作品 →</a></div><div><h4>合作作品与职务</h4><ul class="team-evidence-list">' + c.evidence.map(function (w) { return '<li>' + Staff.ui.subjectLink(w.id, w.name) + '<span>' + html(w.date || '日期未知') + ' · 项目组 ' + w.group + ' · 合作职务：' + html(w.roles.join('、')) + '<br>制片署名：' + html(w.anchorRoles.join('、')) + '</span></li>'; }).join('') + '</ul>' +
           (a.outside && a.outside.length ? '<details><summary>其他公开动画制作作品（' + a.outside.length + ' 部）</summary><ul class="team-evidence-list">' + a.outside.map(function (w) { return '<li>' + Staff.ui.subjectLink(w.id, w.name) + '</li>'; }).join('') + '</ul></details>' : '') + '</div></div></td></tr>';
       }).join('') + '</tbody></table></div>';
@@ -203,8 +207,8 @@
   }
   function exportCsv() {
     function cell(value) { let s = String(value === null || value === undefined ? '' : value); if (/^[=+\-@]/.test(s)) s = "'" + s; return '"' + s.replace(/"/g, '""') + '"'; }
-    const rows = [['名称', 'Bangumi ID', '类型', '制作职务', '判定', '合作作品数', '合并系列项目组', '总项目覆盖率', '近作参与', '近作加权覆盖', '全履历合作集中度', '理由']].concat(state.report.candidates.map(function (c) {
-      return [c.name, c.id, c.type === 3 ? '组合' : '个人', c.roles.join('、'), model.TIERS[c.tier], c.count, c.groupCount, pct(c.coverage), c.recent + '/' + c.recentTotal, pct(c.weightedCoverage), pct(c.activity.share), c.reasons.join('；')];
+    const rows = [['名称', 'Bangumi ID', '类型', '制作职务', '判定', '合作作品数', '合并系列项目组', '总项目覆盖率', '近作参与', '近作加权覆盖', '全履历合作集中度', '主要岗位', '同岗位合作/全部', '同岗位集中度', '其他岗位共事', '辅助分', '理由']].concat(state.report.candidates.map(function (c) {
+      return [c.name, c.id, c.type === 3 ? '组合' : '个人', c.roles.join('、'), model.TIERS[c.tier], c.count, c.groupCount, pct(c.coverage), c.recent + '/' + c.recentTotal, pct(c.weightedCoverage), pct(c.activity.share), c.mainRole ? c.mainRole.label : '', c.mainRole ? c.mainRole.shared + '/' + c.mainRole.total : '', c.mainRole ? pct(c.mainRole.share) : '', c.auxiliary.length, c.auxiliaryBonus, c.reasons.join('；')];
     }));
     download('\ufeff' + rows.map(function (row) { return row.map(cell).join(','); }).join('\r\n'), 'csv', 'text/csv');
   }

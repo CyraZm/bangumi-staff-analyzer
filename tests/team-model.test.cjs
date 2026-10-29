@@ -106,3 +106,58 @@ test('loader checks every cross-project repeat collaborator without a year or pe
   assert.equal(requests.filter(p => p.startsWith('/v0/persons/')).length, 6); assert.equal(report.projects.length, 2);
   requests = []; await assert.rejects(Staff.teamLoader.run({ id: 999 }, [], {}, { cancelled: true }, () => {}), e => e.cancelled); assert.equal(requests.length, 0);
 });
+
+function directorHistory(Staff) {
+  const jobs = new Set([1,2,3,4,5,6,22]);
+  const projects = Array.from({length:22}, (_,i) => ({id:i+1,name:'project-'+(i+1),date:i===21?'2027-02-11':(2000+i)+'-01-01',platform:i>16&&i<21?'WEB':'TV',relations:[],persons:[person(999,'动画制片人'),person(80,'导演'),...(jobs.has(i+1)?[person(1,'导演')]:i===7?[person(1,'演出')]:[])]}));
+  const data = Array.from(jobs,id=>({id,type:2,staff:'导演'}));
+  [100,101,102,103].forEach(id=>data.push({id,type:2,staff:'导演'}));
+  data.push({id:8,type:2,staff:'演出'});
+  for(let i=0;i<48;i++)data.push({id:200+i,type:2,staff:'原画'});
+  const profiles = new Map([[1,{ok:true,data}]]);
+  const metadata = new Map([100,101,102,103].map((id,i)=>[id,{id,date:(2017+i)+'-07-01'}]));
+  return {projects,profiles,metadata,sample:Staff.teamModel.prepare(999,projects,{asOf:'2026-10-29'})};
+}
+test('a repeat director with an animator past and an announced reunion remains core despite one of five producer recent works', () => {
+  const Staff=environment(),f=directorHistory(Staff);
+  const c=Staff.teamModel.finish(f.sample,f.profiles,{metadata:f.metadata}).candidates.find(c=>c.id===1);
+  assert.equal(c.count,8);assert.equal(c.activity.total,60);assert.equal(c.mainRole.shared,7);assert.equal(c.mainRole.total,11);
+  assert.equal(c.recent,1);assert.equal(c.recentTotal,5);assert.equal(c.volumeTrend,'down');
+  assert.equal(c.tier,'core');assert.equal(c.coreRoute,'major-role');assert.equal(c.trend,'continued');
+  assert.deepEqual(Array.from(c.mainRole.upcomingIds),[22]);
+});
+test('same-role recent opportunities ignore unrelated known platforms and retain a long-form director without using year gaps', () => {
+  const Staff=environment(),f=directorHistory(Staff);
+  f.projects[21].date='2021-12-01';
+  const c=Staff.teamModel.finish(Staff.teamModel.prepare(999,f.projects,{asOf:'2026-10-29'}),f.profiles,{metadata:f.metadata}).candidates.find(c=>c.id===1);
+  assert.equal(c.mainRole.upcomingIds.length,0);assert.equal(c.tier,'core');assert.equal(c.trend,'continued');
+  assert.equal(c.mainRole.opportunityIds.some(id=>[18,19,20,21].includes(id)),false);
+});
+test('a single high-ranking role or a future credit alone cannot establish a core team', () => {
+  const Staff=environment(),f=directorHistory(Staff);
+  f.projects.forEach(p=>{if(p.id!==22)p.persons=p.persons.filter(s=>s.id!==1)});
+  const c=Staff.teamModel.finish(Staff.teamModel.prepare(999,f.projects,{asOf:'2026-10-29'}),f.profiles,{metadata:f.metadata}).candidates.find(c=>c.id===1);
+  assert.equal(c.count,1);assert.notEqual(c.tier,'core');
+});
+test('other production jobs add capped ranking support without adding main counts, promoting an external artist or creating auxiliary-only candidates', () => {
+  const Staff=environment(),f=fixture(Staff);
+  const auxiliaryProjects=Array.from({length:9},(_,i)=>({id:500+i,name:'aux-'+i,date:'2025-01-01',producerScopes:[{role:'制作进行',eps:'OP'}],persons:[{...person(999,'制作进行'),eps:'OP'},person(1,'分镜'),person(2,'原画'),person(777,'导演')]}));
+  auxiliaryProjects.push(auxiliaryProjects[0]);
+  const baseline=Staff.teamModel.finish(f.sample,f.profiles).candidates.find(c=>c.id===1);
+  const report=Staff.teamModel.finish(f.sample,f.profiles,{producerId:999,auxiliaryProjects});
+  const c=report.candidates.find(c=>c.id===1),artist=report.candidates.find(c=>c.id===2);
+  assert.equal(c.count,baseline.count);assert.equal(c.groupCount,baseline.groupCount);assert.equal(c.weightedCoverage,baseline.weightedCoverage);
+  assert.equal(c.auxiliary.length,9);assert.equal(c.auxiliaryBonus,5);assert.ok(Math.abs(c.rankingSupport-c.weightedCoverage-.05)<1e-12);
+  assert.equal(c.auxiliary[0].producerScopes[0].eps,'OP');assert.equal(artist.tier,'external');assert.equal(report.candidates.some(c=>c.id===777),false);
+});
+test('funding titles and failed auxiliary tables neither supply cooperation evidence nor change main judgement', () => {
+  const Staff=environment(),f=fixture(Staff);
+  const report=Staff.teamModel.finish(f.sample,f.profiles,{producerId:999,auxiliaryProjects:[
+    {id:500,persons:[person(999,'制片人'),person(1,'导演')]},
+    {id:501,persons:[person(999,'企画'),person(1,'导演')]},
+    {id:502,staffFailed:true,persons:[person(999,'制作进行'),person(1,'导演')]}
+  ]});
+  const c=report.candidates.find(c=>c.id===1);assert.equal(c.tier,'core');assert.equal(c.auxiliary.length,0);
+  const refs=Staff.teamModel.auxiliaryWorks([{id:1,type:2,staff:'动画制片人'},{id:2,type:2,staff:'制片人'},{id:3,type:2,staff:'企画'},{id:4,type:2,staff:'制作进行',eps:'OP'}],new Set([1]));
+  assert.deepEqual(Array.from(refs,r=>r.id),[4]);assert.equal(refs[0].producerScopes[0].eps,'OP');
+});

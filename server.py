@@ -12,7 +12,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
 APP_ID = "bangumi-staff-analyzer"
-VERSION = "1.8.1"
+VERSION = "1.9.0"
 
 
 class AppServer(ThreadingHTTPServer):
