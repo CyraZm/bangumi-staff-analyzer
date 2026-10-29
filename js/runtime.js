@@ -22,6 +22,7 @@
 
   function showStopped(confirmed) {
     if (stopped) return;
+    if (Staff.views.compare) Staff.views.compare.flushSave();
     stopped = true;
     clearTimeout(timer);
     Staff.api.stopAll();
@@ -83,7 +84,7 @@
         title: '当前以浏览器模式打开',
         content: '<p>此页面没有连接应用启动器，无法关闭手动启动的服务。以后请双击 <strong>Staff Analyzer.app</strong>，即可直接启动并在这里完整关闭。</p><p>现在可以停止本页面的数据请求，再关闭标签页。</p>',
         okText: '停止页面任务',
-        onOk: function () { showStopped(false); }
+        onOk: async function () { await Staff.views.compare.flushSave(); showStopped(false); }
       });
       return;
     }
@@ -91,6 +92,7 @@
     button.disabled = true;
     status.textContent = '正在关闭…';
     try {
+      await Staff.views.compare.flushSave();
       const result = await request('shutdown', {
         method: 'POST',
         headers: { 'X-Staff-Token': session.token, 'Content-Type': 'application/json' },

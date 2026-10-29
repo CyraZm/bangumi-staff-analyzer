@@ -1,6 +1,7 @@
 /* bangumi-staff-analyzer 应用入口：路由、导航、设置、启动 */
 (function () {
   const views = Staff.views;
+  let activeView = null;
 
   function parseHash() {
     const raw = location.hash.replace(/^#\/?/, '') || 'home';
@@ -18,6 +19,8 @@
     const route = parseHash();
     const view = views[route.name];
     const main = document.getElementById('view');
+    if (activeView && activeView.leave) activeView.leave();
+    activeView = null;
     document.querySelectorAll('#nav a').forEach(function (a) {
       const active = a.dataset.route === (route.name === 'analysis' ? 'home' : route.name);
       a.classList.toggle('active', active);
@@ -32,11 +35,13 @@
     main.innerHTML = '';
     try {
       view.render(main, route.params);
+      activeView = view;
     } catch (err) {
       main.innerHTML = Staff.ui.empty('页面渲染出错：' + err.message);
       console.error(err);
     }
     window.scrollTo(0, 0);
+    if (view.afterRender) view.afterRender();
   }
 
   window.addEventListener('hashchange', navigate);
@@ -93,6 +98,7 @@
         Staff.ui.toast('已清空 API 缓存', 'success');
       });
       holder.querySelector('#set-clear-all').addEventListener('click', async function () {
+        await views.compare.clearWorkspace();
         await Promise.all([
           Staff.db.clear(Staff.db.STORES.cache),
           Staff.db.clear(Staff.db.STORES.tags),
@@ -115,7 +121,7 @@
   Staff.app = { navigate: navigate, parseHash: parseHash, openSettings: openSettings };
 
   // 启动
-  loadSettings().finally(function () {
+  Promise.all([loadSettings(), views.compare.restoreWorkspace()]).finally(function () {
     navigate();
   });
 })();

@@ -10,18 +10,36 @@ const credit = (id, relation, type = 1) => ({ id, relation, type, name: 'staff-'
 const panel = (key, list) => ({ key, credits: data.splitCredits(list) });
 const ids = records => Array.from(records, record => record.id);
 
-test('creative analysis excludes funding, coordination, studios, groups and unknown roles', () => {
+test('production analysis includes on-site coordination but excludes funding, studios, groups and unknown roles', () => {
   const source = [credit(1, '导演'), credit(2, '原画'), credit(3, '音响监督'),
     credit(4, '企画'), credit(5, '製作'), credit(6, '制作'), credit(7, '制作进行'),
     credit(8, '制片人'), credit(9, '设定制作'), credit(10, '原作'), credit(11, '未知职务'),
     credit(12, '音响', 2), credit(13, '音乐', 3), credit(14, '导演', 0),
     credit(15, '动画制作', 2), credit(16, '动画制片人')];
   const split = data.splitCredits(source);
-  assert.deepEqual(ids(split.creative.values()), [1, 2, 3]);
+  assert.deepEqual(ids(split.creative.values()), [1, 2, 3, 7, 9]);
   assert.deepEqual(ids(split.studio), [15]);
   assert.deepEqual(ids(split.producer), [16]);
-  assert.equal(split.extra.length, 11);
+  assert.equal(split.extra.length, 9);
   assert.equal(split.sourceCount, source.length);
+});
+
+test('production delivery roles participate, while similarly named business credits stay separate', () => {
+  const roles = ['制作进行', '制作进行协力', '制作管理', '制作管理助理', '设定制作', '设定制作助理',
+    '制作统括', '制作事务', '制作协力', 'CG 制作进行', '美术制作进行', '音响制作担当', '剧本协调'];
+  const source = roles.map((role, i) => credit(i + 1, role));
+  source.push(credit(50, '製作统括'), credit(51, '製作协力'), credit(52, '制作助理'),
+    credit(53, '企画'), credit(54, '制作'), credit(55, '制作协力', 2), credit(56, '动画制片人'));
+  const split = data.splitCredits(source);
+  assert.deepEqual(ids(split.creative.values()), roles.map((_, i) => i + 1));
+  assert.deepEqual(ids(split.extra), [50, 51, 52, 53, 54, 55]);
+  assert.deepEqual(ids(split.producer), [56]);
+});
+
+test('a production manager and animation assistant can overlap across different production roles', () => {
+  const records = data.overlap([panel(1, [credit(1, '制作进行'), credit(2, '设定制作')]),
+    panel(2, [credit(1, '制作管理'), credit(2, '设定制作助理')])]);
+  assert.deepEqual(Array.from(records, r => [r.id, r.count]), [[1, 2], [2, 2]]);
 });
 
 test('a person with creative and administrative credits retains only creative roles in overlap', () => {

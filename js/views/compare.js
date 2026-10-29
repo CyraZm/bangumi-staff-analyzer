@@ -12,49 +12,204 @@
   ];
   const MAX_PANELS = 8;
 
-  const state = {
-    mode: 'work',   // work | company
-    panels: [],
-    overlapScope: 'shared' // shared | all
-  };
+  function newSession(mode) {
+    return { mode: mode, panels: [], overlapScope: 'shared', ui: null, run: null, concurrency: 5, interval: 200 };
+  }
+  const sessions = { work: newSession('work'), company: newSession('company') };
+  let state = sessions.work;
   let nextKey = 1;
+  let workspaceRoot = null;
+  let saveTimer = null;
+  let saveEpoch = 0;
+  let saveQueue = Promise.resolve();
+  let suppressSaves = false;
+  const WORKSPACE_KEY = 'compare-workspace-v1';
+
+  function query(selector) { return workspaceRoot && workspaceRoot.querySelector(selector); }
+
+  function captureUi() {
+    if (!workspaceRoot || !workspaceRoot.isConnected) return;
+    state.ui = {
+      scrollTop: workspaceRoot.isConnected ? window.scrollY : (state.ui ? state.ui.scrollTop : 0),
+      details: Array.from(workspaceRoot.querySelectorAll('details'), function (el) { return el.open; }),
+      scrolls: Array.from(workspaceRoot.querySelectorAll('.table-wrap'), function (el) { return el.scrollLeft; })
+    };
+    const conc = query('#cmp-conc'), interval = query('#cmp-int');
+    if (conc) state.concurrency = parseInt(conc.value, 10) || 5;
+    if (interval) state.interval = Math.max(0, parseInt(interval.value, 10) || 0);
+  }
+
+  function applyUi() {
+    if (!state.ui || !workspaceRoot) return;
+    suppressSaves = true;
+    workspaceRoot.querySelectorAll('details').forEach(function (el, i) { el.open = !!state.ui.details[i]; });
+    workspaceRoot.querySelectorAll('.table-wrap').forEach(function (el, i) { el.scrollLeft = state.ui.scrolls[i] || 0; });
+    suppressSaves = false;
+  }
+
+  function afterRender() {
+    const session = state;
+    requestAnimationFrame(function () {
+      if (state !== session || !workspaceRoot || !workspaceRoot.isConnected) return;
+      applyUi();
+      window.scrollTo(0, session.ui ? session.ui.scrollTop : 0);
+    });
+  }
+
+  function snapshot() {
+    const modes = {};
+    ['work', 'company'].forEach(function (mode) {
+      const session = sessions[mode];
+      modes[mode] = {
+        overlapScope: session.overlapScope, ui: session.ui,
+        concurrency: session.concurrency, interval: session.interval,
+        panels: session.panels.map(function (p) {
+          // Derived maps and in-progress requests are rebuilt; IndexedDB preserves staff relation Sets.
+          return { key: p.key, index: p.index, workType: p.workType, query: p.query || '', subject: p.subject, company: p.company };
+        })
+      };
+    });
+    return { schema: 1, activeMode: state.mode, nextKey: nextKey, modes: modes };
+  }
+
+  function saveStatus(message) {
+    const status = query('#cmp-save-status');
+    if (status) status.textContent = message;
+  }
+
+  function flushSave() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (suppressSaves || !workspaceRoot) return saveQueue;
+    captureUi();
+    const value = snapshot(), epoch = saveEpoch;
+    saveQueue = saveQueue.catch(function () {}).then(function () {
+      if (epoch !== saveEpoch) return;
+      return Staff.db.put(Staff.db.STORES.settings, { key: WORKSPACE_KEY, value: value }).then(function () {
+        if (epoch === saveEpoch) saveStatus('对比已保存在本机');
+      });
+    }).catch(function () { saveStatus('本次打开期间会保留对比'); });
+    return saveQueue;
+  }
+
+  function scheduleSave() {
+    if (suppressSaves) return;
+    saveStatus('对比正在保存…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave, 180);
+  }
+
+  async function restoreWorkspace() {
+    try {
+      const record = await Staff.db.get(Staff.db.STORES.settings, WORKSPACE_KEY);
+      const saved = record && record.value;
+      if (!saved || saved.schema !== 1 || !saved.modes) return;
+      ['work', 'company'].forEach(function (mode) {
+        const raw = saved.modes[mode];
+        if (!raw || !Array.isArray(raw.panels) || raw.panels.length > MAX_PANELS) return;
+        const session = newSession(mode);
+        session.overlapScope = raw.overlapScope === 'all' ? 'all' : 'shared';
+        session.ui = raw.ui && Array.isArray(raw.ui.details) && Array.isArray(raw.ui.scrolls) ? raw.ui : null;
+        session.concurrency = Math.min(20, Math.max(1, Number(raw.concurrency) || 5));
+        session.interval = Math.max(0, Number(raw.interval) || 0);
+        session.panels = raw.panels.map(function (p, index) {
+          const subject = p.subject && p.subject.id && Array.isArray(p.subject.persons) ? p.subject : null;
+          const company = p.company && p.company.id && Array.isArray(p.company.works) && Array.isArray(p.company.worksAll) ? p.company : null;
+          return { key: nextKey++, index: index + 1, workType: TYPE_OPTIONS.some(function (t) { return t.code === p.workType; }) ? p.workType : 2,
+            query: typeof p.query === 'string' ? p.query : '', subject: subject, company: company, request: 0 };
+        });
+        sessions[mode] = session;
+      });
+      state = sessions[saved.activeMode === 'company' ? 'company' : 'work'];
+    } catch (err) { /* Storage may be unavailable; the in-memory workspace still works. */ }
+  }
+
+  function leave() { captureUi(); return flushSave(); }
+
+  function cancelRun(session) {
+    if (session.run) session.run.signal.cancelled = true;
+    session.run = null;
+  }
+
+  async function clearWorkspace() {
+    clearTimeout(saveTimer);
+    ++saveEpoch;
+    cancelRun(sessions.work);
+    cancelRun(sessions.company);
+    sessions.work = newSession('work');
+    sessions.company = newSession('company');
+    state = sessions.work;
+    suppressSaves = true;
+    if (workspaceRoot) { updateModeButtons(); resetPanels(); }
+    suppressSaves = false;
+    await saveQueue;
+    await Staff.db.remove(Staff.db.STORES.settings, WORKSPACE_KEY);
+    saveStatus('对比会自动保存在本机');
+  }
+
+  window.addEventListener('pagehide', flushSave);
+  window.addEventListener('scroll', function () {
+    if (workspaceRoot && workspaceRoot.isConnected) scheduleSave();
+  }, { passive: true });
 
   /* ============ 渲染入口 ============ */
   function render(container) {
-    container.innerHTML =
+    if (workspaceRoot) { container.appendChild(workspaceRoot); return; }
+    workspaceRoot = document.createElement('div');
+    workspaceRoot.className = 'compare-workspace';
+    container.appendChild(workspaceRoot);
+    workspaceRoot.innerHTML =
       '<h2 class="page-title">发现制作人员的交集</h2>' +
       '<p class="page-desc">选择 2–8 部作品或公司，把制作人员的交集与企划、出品等署名分开阅读。合作记录提供线索，不直接代表固定班底。</p>' +
       '<div class="compare-tabs" role="group" aria-label="对比类型">' +
       '  <button type="button" class="chip" id="mode-work">作品对比</button> ' +
       '  <button type="button" class="chip" id="mode-company">公司对比</button>' +
       '</div>' +
+      '<div class="compare-tools"><span id="cmp-save-status">对比会自动保存在本机</span><button class="btn secondary small" id="cmp-reset">清空本次对比</button></div>' +
       '<div id="cmp-panels"></div>' +
       '<div id="cmp-action" style="margin-bottom:16px"></div>' +
       '<div id="cmp-result"></div>';
 
-    container.querySelector('#mode-work').addEventListener('click', function () { switchMode('work'); });
-    container.querySelector('#mode-company').addEventListener('click', function () { switchMode('company'); });
+    query('#mode-work').addEventListener('click', function () { switchMode('work'); });
+    query('#mode-company').addEventListener('click', function () { switchMode('company'); });
 
+    query('#cmp-reset').addEventListener('click', function () {
+      cancelRun(state);
+      state.ui = null;
+      resetPanels();
+      flushSave();
+    });
+    workspaceRoot.addEventListener('input', scheduleSave);
+    workspaceRoot.addEventListener('change', scheduleSave);
+    workspaceRoot.addEventListener('toggle', scheduleSave, true);
+    workspaceRoot.addEventListener('scroll', scheduleSave, true);
     updateModeButtons();
-    resetPanels();
+    if (state.panels.length) { renderPanels(); renderResult(); applyUi(); }
+    else resetPanels();
   }
 
   function switchMode(mode) {
     if (state.mode === mode) return;
-    state.mode = mode;
+    captureUi();
+    flushSave();
+    state = sessions[mode];
     updateModeButtons();
-    resetPanels();
+    if (state.panels.length) { renderPanels(); renderResult(); applyUi(); }
+    else resetPanels();
+    afterRender();
+    scheduleSave();
   }
 
   function updateModeButtons() {
     ['work', 'company'].forEach(function (mode) {
-      const button = document.querySelector('#mode-' + mode);
+      const button = query('#mode-' + mode);
       button.classList.toggle('active', state.mode === mode);
       button.setAttribute('aria-pressed', state.mode === mode ? 'true' : 'false');
     });
   }
 
   function resetPanels() {
+    cancelRun(state);
     state.panels = [];
     state.overlapScope = 'shared';
     addPanel();
@@ -70,6 +225,7 @@
   }
 
   function removePanel(key) {
+    cancelRun(state);
     if (state.panels.length <= 1) return;
     state.panels = state.panels.filter(function (p) { return p.key !== key; });
     reindex();
@@ -81,7 +237,7 @@
 
   /* ============ 面板渲染 ============ */
   function renderPanels() {
-    const wrap = document.querySelector('#cmp-panels');
+    const wrap = query('#cmp-panels');
     if (!wrap) return;
     wrap.innerHTML = '';
     state.panels.forEach(function (p) {
@@ -130,7 +286,7 @@
     } else {
       const sel = card.querySelector('[data-type]');
       sel.value = p.workType;
-      sel.addEventListener('change', function () { p.workType = parseInt(sel.value, 10); });
+      sel.addEventListener('change', function () { p.workType = parseInt(sel.value, 10); scheduleSave(); });
       card.querySelector('[data-rm]').addEventListener('click', function () {
         removePanel(p.key);
         renderPanels();
@@ -161,10 +317,14 @@
         }
       },
       onPick: function (item) {
+        p.query = item.label;
         if (isCompanyMode) loadCompany(p, item.id);
         else loadWork(p, item.id);
       }
     });
+
+    combo.setValue(p.query || '');
+    combo.input.addEventListener('input', function () { p.query = combo.input.value; scheduleSave(); });
 
     if (!isCompanyMode) {
       card.querySelector('[data-load-id]').addEventListener('click', function () {
@@ -179,9 +339,9 @@
   }
 
   function renderPanelLoadbox(p, box) {
-    if (state.mode === 'work' && p.loading) {
-      box.innerHTML = Staff.ui.loading('正在加载作品…');
-    } else if (state.mode === 'work' && p.error) {
+    if (p.loading) {
+      box.innerHTML = Staff.ui.loading(state.mode === 'work' ? '正在加载作品…' : '正在加载公司…');
+    } else if (p.error) {
       box.innerHTML = '<p class="compare-error" role="alert">' + Staff.ui.escapeHtml(p.error) + '</p>';
     } else if (state.mode === 'work' && p.subject) {
       const credits = p.credits || Staff.compareData.splitCredits(p.subject.persons, p.subject.infobox);
@@ -203,6 +363,8 @@
         '  <button class="btn small secondary" data-clear>移除</button>' +
         '</div>';
       box.querySelector('[data-clear]').addEventListener('click', function () {
+        ++p.request;
+        cancelRun(state);
         p.company = null;
         p.staff = null;
         renderPanels();
@@ -215,6 +377,7 @@
 
   /* ============ 加载 ============ */
   function loadWork(p, id) {
+    const session = state;
     if (state.panels.some(function (other) { return other !== p && ((other.subject && String(other.subject.id) === String(id)) || String(other.loadingId) === String(id)); })) {
       Staff.ui.toast('这部作品已在对比中，请选择另一部作品');
       return;
@@ -231,42 +394,58 @@
       p.subject = { id: id, name: res[0].name_cn || res[0].name, type: res[0].type, infobox: res[0].infobox || [], persons: res[1] || [] };
       p.loading = false;
       p.loadingId = null;
-      renderResult();
+      if (state === session) renderResult();
+      else scheduleSave();
     }).catch(function (err) {
       if (!isCurrent()) return;
       p.loading = false;
       p.loadingId = null;
       p.error = '加载失败：' + err.message;
-      renderResult();
+      if (state === session) renderResult();
+      else scheduleSave();
     });
     function isCurrent() {
-      return state.mode === 'work' && state.panels.includes(p) && p.request === request && !(Staff.runtime && Staff.runtime.isStopped());
+      return sessions[session.mode] === session && session.panels.includes(p) && p.request === request && !(Staff.runtime && Staff.runtime.isStopped());
     }
   }
 
   function loadCompany(p, id) {
-    const box = document.querySelector('[data-panel="' + p.key + '"] [data-loadbox]');
-    box.innerHTML = Staff.ui.loading('正在加载公司 ' + id + '…');
+    const session = state;
+    cancelRun(session);
+    const request = ++p.request;
+    p.company = null;
+    p.loading = true;
+    p.error = null;
+    renderPanels();
+    renderResult();
     Promise.all([Staff.api.getPerson(id), Staff.api.getPersonSubjects(id)]).then(function (res) {
-      const person = res[0];
-      const worksAll = res[1] || [];
-      const works = worksAll.filter(function (w) { return w.staff === '动画制作'; });
-      p.company = { id: id, name: person.name, type: person.type, worksAll: worksAll, works: works, staff: null };
-      p.staff = null;
-      renderPanelLoadbox(p, box);
-      renderResult();
+      if (!isCurrent()) return;
+      const person = res[0], worksAll = res[1] || [];
+      p.company = { id: id, name: person.name, type: person.type, worksAll: worksAll,
+        works: worksAll.filter(function (w) { return w.staff === '动画制作'; }), staff: null };
+      p.loading = false;
+      if (state === session) { renderPanels(); renderResult(); }
+      else scheduleSave();
     }).catch(function (err) {
-      box.innerHTML = Staff.ui.empty('加载失败：' + err.message);
+      if (!isCurrent()) return;
+      p.loading = false;
+      p.error = '加载失败：' + err.message;
+      if (state === session) { renderPanels(); renderResult(); }
+      else scheduleSave();
     });
+    function isCurrent() {
+      return sessions[session.mode] === session && session.panels.includes(p) && p.request === request && !(Staff.runtime && Staff.runtime.isStopped());
+    }
   }
 
   /* ============ 结果分发 ============ */
   function renderResult() {
-    const root = document.querySelector('#cmp-result');
-    const action = document.querySelector('#cmp-action');
+    const root = query('#cmp-result');
+    const action = query('#cmp-action');
     if (!root || !action) return;
     if (state.mode === 'work') renderWorkResult(root, action);
     else renderCompanyResult(root, action);
+    scheduleSave();
   }
 
   /* ============ 作品对比结果 ============ */
@@ -327,7 +506,7 @@
     const counts = Staff.compareData.separatePresence(loaded);
     state.panels.forEach(function (p) {
       p.separateCounts = counts;
-      const box = document.querySelector('[data-panel="' + p.key + '"] [data-loadbox]');
+      const box = query('[data-panel="' + p.key + '"] [data-loadbox]');
       if (box) renderPanelLoadbox(p, box);
     });
     if (!loaded.length) {
@@ -345,7 +524,7 @@
       '<div class="comparison-heading"><div><span class="section-kicker">制作人员</span>' +
       '<h3 id="overlap-heading">' + (n === 1 ? '制作人员名单' : '制作人员交集') + '</h3></div>' +
       '<span class="overlap-count">' + shown.length + '<small> 人</small></span></div>' +
-      '<p class="comparison-note">仅统计导演、作画、美术、摄影、声音等制作职务的个人。兼任企划等职务时，只计入其制作职务。</p>' +
+      '<p class="comparison-note">统计导演、作画、美术、摄影、声音，以及制作进行、制作管理、设定制作等现场岗位的个人。兼任企划等职务时，只计入其制作职务。</p>' +
       (n > 2 ? '<div class="overlap-scopes" role="group" aria-label="人员交集范围">' +
         '<button class="chip' + (state.overlapScope === 'shared' ? ' active' : '') + '" data-scope="shared" aria-pressed="' + (state.overlapScope === 'shared') + '">至少两部共同 <strong>' + shared.length + '</strong></button>' +
         '<button class="chip' + (state.overlapScope === 'all' ? ' active' : '') + '" data-scope="all" aria-pressed="' + (state.overlapScope === 'all') + '">全部共同 <strong>' + all.length + '</strong></button></div>' : '') +
@@ -356,7 +535,7 @@
         return '<details class="card exclusive-card"><summary><span>作品 ' + p.index + ' · ' + Staff.ui.escapeHtml(p.subject.name) + '</span><strong>' + persons.length + ' 人</strong></summary>' + productionList(persons) + '</details>';
       }).join('') + '</div></section>' : '') +
       '<section class="separate-credits" aria-labelledby="extra-heading"><div class="comparison-heading"><div><span class="section-kicker">独立署名 · 不计入交集</span><h3 id="extra-heading">企划、出品与其他署名</h3></div></div>' +
-      '<p class="comparison-note">企划、製作、制片及制作统筹等在此列出，公司、组合与未识别职务也保留在这里。重合项在各作品中同步标记。</p>' +
+      '<p class="comparison-note">企划、製作、出品及一般制片等在此列出，公司、组合与未识别职务也保留在这里。重合项在各作品中同步标记。</p>' +
       '<p class="source-order-note">优先按条目信息框署名排列，编号不因重合改变；无法对应时标注「顺序未核实」，沿用关联接口顺序。不按姓名或重合人数重排，也不据此推断投资比例。</p>' +
       extraTable(loaded, counts) + '</section>';
 
@@ -395,57 +574,64 @@
   }
 
   /* ============ 公司对比结果 ============ */
+  function renderCompanyProgress(action, session) {
+    const task = session.run;
+    action.innerHTML = '<div class="card"><div class="row" style="justify-content:space-between;align-items:center">' +
+      '<span class="progress-text" id="cmp-prog">聚合 staff：' + task.done + ' / ' + task.total + '</span>' +
+      '<button class="btn small danger" id="cmp-cancel">取消</button></div>' +
+      '<div class="progress-bar" style="margin-top:8px"><i style="width:' + (task.total ? Math.round(task.done / task.total * 100) : 0) + '%"></i></div></div>';
+    action.querySelector('#cmp-cancel').addEventListener('click', function () {
+      cancelRun(session);
+      if (state === session) renderResult();
+    });
+  }
+
   function runCompanyAggregation() {
-    const companies = state.panels.filter(function (p) { return p.company; });
+    const session = state;
+    const companies = session.panels.filter(function (p) { return p.company; });
     if (companies.length < 2) { Staff.ui.toast('至少选择两家公司'); return; }
-    const concurrency = parseInt(document.querySelector('#cmp-conc').value, 10) || 5;
-    const interval = parseInt(document.querySelector('#cmp-int').value, 10) || 200;
-    const signal = { cancelled: false };
+    session.concurrency = Math.min(20, Math.max(1, parseInt(query('#cmp-conc').value, 10) || 5));
+    session.interval = Math.max(0, parseInt(query('#cmp-int').value, 10) || 0);
     const items = [];
+    const owners = companies.map(function (p) { return p.company; });
     companies.forEach(function (p) {
       p.company.works.forEach(function (w) {
-        items.push({
-          path: '/v0/subjects/' + w.id + '/persons',
-          key: 'subject-persons|' + w.id,
-          ttl: Staff.config.cacheTtl.subjectPersons,
-          force: false,
-          _panel: p.key,
-          _work: w
-        });
+        items.push({ path: '/v0/subjects/' + w.id + '/persons', key: 'subject-persons|' + w.id,
+          ttl: Staff.config.cacheTtl.subjectPersons, force: false, _panel: p.key, _work: w });
       });
     });
-
-    const action = document.querySelector('#cmp-action');
-    action.innerHTML =
-      '<div class="card">' +
-      '  <div class="row" style="justify-content:space-between;align-items:center">' +
-      '    <span class="progress-text" id="cmp-prog">聚合 staff：0 / ' + items.length + '</span>' +
-      '    <button class="btn small danger" id="cmp-cancel">取消</button>' +
-      '  </div>' +
-      '  <div class="progress-bar" style="margin-top:8px"><i style="width:0"></i></div>' +
-      '</div>';
-    const bar = action.querySelector('.progress-bar i');
-    document.querySelector('#cmp-cancel').addEventListener('click', function () { signal.cancelled = true; });
-
+    const task = { signal: { cancelled: false }, done: 0, total: items.length };
+    session.run = task;
+    renderResult();
     Staff.api.runBatch(items, {
-      concurrency: concurrency,
-      interval: interval,
-      signal: signal,
+      concurrency: session.concurrency, interval: session.interval, signal: task.signal,
       onProgress: function (done, total) {
-        bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
-        document.querySelector('#cmp-prog').textContent = '聚合 staff：' + done + ' / ' + total;
+        if (session.run !== task || task.signal.cancelled) return;
+        task.done = done;
+        task.total = total;
+        if (state === session) {
+          const progress = query('#cmp-prog'), bar = query('#cmp-action .progress-bar i');
+          if (progress) progress.textContent = '聚合 staff：' + done + ' / ' + total;
+          if (bar) bar.style.width = (total ? Math.round(done / total * 100) : 0) + '%';
+        }
       }
     }).then(function (results) {
-      if (Staff.runtime && Staff.runtime.isStopped()) return;
-      companies.forEach(function (p) {
+      if (sessions.company !== session || session.run !== task || task.signal.cancelled || (Staff.runtime && Staff.runtime.isStopped())) return;
+      session.run = null;
+      companies.forEach(function (p, index) {
+        if (!session.panels.includes(p) || p.company !== owners[index]) return;
         const resFor = [], worksFor = [];
         items.forEach(function (it, i) {
           if (it._panel === p.key) { resFor.push(results[i]); worksFor.push(it._work); }
         });
-        p.company.staff = Staff.api.aggregateStaff(resFor, worksFor, null)
-          .filter(function (e) { return e.type !== 2; }); // 只统计个人，过滤公司实体
+        p.company.staff = Staff.api.aggregateStaff(resFor, worksFor, null).filter(function (entry) { return entry.type !== 2; });
       });
-      renderResult();
+      if (state === session) renderResult();
+      else scheduleSave();
+    }).catch(function () {
+      if (session.run !== task) return;
+      session.run = null;
+      if (state === session) { renderResult(); Staff.ui.toast('对比未完成，可重新开始'); }
     });
   }
 
@@ -490,12 +676,18 @@
       return;
     }
 
+    if (state.run) {
+      renderCompanyProgress(action, state);
+      cr.innerHTML = '';
+      return;
+    }
+
     if (loaded.some(function (p) { return !p.company.staff; })) {
       action.innerHTML =
         '<div class="card">' +
         '  <div class="row" style="gap:12px;flex-wrap:wrap">' +
-        '    <label class="small muted">并发 <input type="number" id="cmp-conc" value="5" min="1" max="20" style="width:64px;padding:4px 8px"></label>' +
-        '    <label class="small muted">间隔ms <input type="number" id="cmp-int" value="200" min="0" style="width:80px;padding:4px 8px"></label>' +
+        '    <label class="small muted">并发 <input type="number" id="cmp-conc" value="' + state.concurrency + '" min="1" max="20" style="width:64px;padding:4px 8px"></label>' +
+        '    <label class="small muted">间隔ms <input type="number" id="cmp-int" value="' + state.interval + '" min="0" style="width:80px;padding:4px 8px"></label>' +
         '    <button class="btn" id="cmp-run">开始对比（聚合各公司 staff）</button>' +
         '  </div>' +
         '  <div class="small muted" style="margin-top:8px">对两家公司全部「动画制作」作品逐个抓取 staff。首次较慢；已统计过的作品会命中本地缓存。</div>' +
@@ -604,5 +796,5 @@
   }
 
   Staff.views = Staff.views || {};
-  Staff.views.compare = { render: render };
+  Staff.views.compare = { render: render, leave: leave, afterRender: afterRender, restoreWorkspace: restoreWorkspace, clearWorkspace: clearWorkspace, flushSave: flushSave };
 })();

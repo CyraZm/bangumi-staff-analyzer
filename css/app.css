@@ -189,6 +189,7 @@ table.data .mono { font-variant-numeric: tabular-nums; }
 
 /* Work comparison: source credits stay ordered; analysis shows individuals only. */
 .comparison-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 12px; }
+.compare-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: -10px 0 20px; color: var(--text-dim); font-size: 13px; }
 .comparison-heading h3 { font-size: 21px; margin: 4px 0 0; color: var(--text); }
 .section-kicker { font-size: 12px; letter-spacing: 1px; color: var(--accent); font-weight: 700; }
 .comparison-note, .comparison-summary, .source-order-note { font-size: 14px; color: var(--text-dim); line-height: 1.85; margin: 0 0 16px; }
