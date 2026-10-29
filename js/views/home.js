@@ -84,7 +84,7 @@
         result.innerHTML = Staff.ui.empty('没有找到「' + Staff.ui.escapeHtml(keyword) + '」，试试其他名称或日文原名。');
         return;
       }
-      result.innerHTML = '<div class="result-heading"><h3>搜索结果 <span class="muted small">/ ' + persons.length + '</span></h3><span class="muted small">选择一个名字，进入分析</span></div>' +
+      result.innerHTML = '<div class="result-heading"><h3>搜索结果 <span class="muted small">/ ' + persons.length + '</span></h3><span class="muted small">优先显示相关结果，选择名字进入分析</span></div>' +
         persons.map(function (person) {
           const summary = (person.summary || '').replace(/\s+/g, ' ').trim();
           return '<a class="search-result" href="#/analysis?id=' + encodeURIComponent(person.id) + '">' +

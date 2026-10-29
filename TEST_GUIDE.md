@@ -1,4 +1,4 @@
-# TEST_GUIDE · v1.9.1
+# TEST_GUIDE · v1.9.2
 
 ## 自动验证
 
@@ -21,6 +21,17 @@ playwright-cli -s=team-filter run-code --filename tests/browser/team-filters.js
 ~~~
 
 会使用内存中的受控报告覆盖查询接口，不访问 Bangumi API、不保存结果；应返回 8 类、32 次排序检查通过，并确认辅助姓名/OP 范围、搜索、翻页和切页保留均正确，pageErrors 为空。请在独立测试浏览器中运行。
+
+### 人物搜索浏览器回归
+
+同样在独立预览浏览器中运行：
+
+~~~bash
+playwright-cli -s=person-search open http://localhost:8766/#/team --browser msedge
+playwright-cli -s=person-search run-code --filename tests/browser/person-search.js
+~~~
+
+用受控首屏与 705 条总数验证只请求 offset=0，精确姓名优先，加载/失败/空结果不同，三个搜索入口复用当次缓存，并可用方向键与回车选中人物。
 
 ## 1. macOS 启动与退出
 
@@ -172,3 +183,12 @@ playwright-cli -s=team-filter run-code --filename tests/browser/team-filters.js
 - 修复后使用同一份 1538 项报告（界面注入已完成报告，不重新请求 API）验证 8 类：重复 416、核心 7、稳定 107、外部 69、系列 6、历史减少 6、待观察 1343、全部 1538；各类首屏行数与分页总数一致，夏目辅助依据正确显示福士姓名和制作进行（OP），无页面错误。
 - 新增自包含 tests/browser/team-filters.js：87 项受控报告，初始 40 行、8 类筛选、32 次排序组合、姓名/岗位搜索、无匹配提示、辅助双方姓名/OP 范围、3 页翻页、切页后保持页码全部通过，pageErrors 为空。
 - 33 项 Node 回归通过；此次未改算法与缓存生命周期。正式 .app 1.9.1 的 19 项资源与源文件一致、签名验证通过。
+
+
+### v1.9.2（2026-10-29）
+
+- 官方 API 实测：人物 37507 为松永康佑；完整姓名首屏即有精确匹配，同时给出 705 条模糊结果。旧界面 25 秒后仍未给建议，依次读取 offset=0…180。实际每页 20 条，等待全量分页不适合输入建议。
+- 修复后的真实 Edge：输入完整姓名约 2.8 秒出现建议，搜索仅一次 offset=0 请求；选择后成功加载 37507，显示 9 部明确动画/制作制片作品。
+- 37 项 Node 回归通过。新增 4 项验证首屏返回、精确姓名优先、缓存/强制刷新、空白与全角/空格处理、职业筛选、错误保持为错误，以及作品搜索原分页不变。
+- tests/browser/person-search.js 通过：首页、班底、公司对比共用结果；方向键/回车选中人物；首请求受控暂停时能看到正在搜索；失败、无结果分别显示；三个入口只发一次同名请求，失焦隐藏建议。pageErrors 为空，模拟 400 搜索失败时的浏览器网络日志符合预期。
+- 原 tests/browser/team-filters.js 的 8 类、32 次排序、辅助依据、搜索/空结果、翻页和切页保留继续通过。打包版本 1.9.2 的 19 项资源与源文件一致，签名验证通过。

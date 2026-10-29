@@ -50,7 +50,7 @@
     const combo = Staff.ui.combo(q('#team-combo'), { placeholder: '搜索动画制片人，如：梅原翔太',
       onSearch: function (keyword, done) { Staff.api.searchPersons(keyword, '').then(function (list) {
         done(list.filter(function (p) { return p.type === 1 || p.type === 3; }).slice(0, 20).map(function (p) { return { id: p.id, label: p.name, meta: (p.career || []).join(' / ') || '载入后核对作品身份' }; }));
-      }).catch(function () { done([]); }); }, onPick: function (p) { selectProducer(p.id); } });
+      }).catch(function (err) { done([], err.message); }); }, onPick: function (p) { selectProducer(p.id); } });
     combo.input.id = 'team-search-input'; combo.setValue(state.producer ? state.producer.name : '');
     q('#team-by-id').addEventListener('click', function () {
       const value = combo.getValue();

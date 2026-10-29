@@ -223,12 +223,20 @@
       hide();
       if (!kw) return;
       timer = setTimeout(function () {
-        opts.onSearch(kw, function (items) {
+        if (picked || version !== searchVersion || !container.isConnected || document.activeElement !== input) return;
+        choices = [];
+        selected = -1;
+        drop.innerHTML = '<div class="combo-item muted" role="status">正在搜索…</div>';
+        drop.style.display = 'block';
+        input.setAttribute('aria-expanded', 'true');
+        opts.onSearch(kw, function (items, error) {
           if (picked || version !== searchVersion || !container.isConnected || document.activeElement !== input) return;
           choices = items;
           selected = -1;
           drop.innerHTML = '';
-          if (!items.length) {
+          if (error) {
+            drop.innerHTML = '<div class="combo-item muted" role="alert">搜索失败：' + escapeHtml(error) + '</div>';
+          } else if (!items.length) {
             drop.innerHTML = '<div class="combo-item muted">无结果</div>';
           } else {
             items.forEach(function (it, i) {

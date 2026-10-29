@@ -129,7 +129,7 @@
   }
 
   /* ---------------- 分页循环 ---------------- */
-  async function searchLoop(apiPath, buildBody, key, ttl, force) {
+  async function searchLoop(apiPath, buildBody, key, ttl, force, firstPageOnly) {
     checkRunning();
     const epoch = cacheEpoch;
     if (!force) {
@@ -145,7 +145,7 @@
       });
       const list = (data && data.data) || [];
       results.push.apply(results, list);
-      if (!data || !list.length || results.length >= data.total) break;
+      if (firstPageOnly || !data || !list.length || results.length >= data.total) break;
       offset += list.length;
     }
     await writeCache(key, results, epoch);
@@ -160,13 +160,19 @@
   }
 
   // 搜索人物/公司，career 可选（producer/artist/actor/...）
-  function searchPersons(keyword, career, force) {
+  async function searchPersons(keyword, career, force) {
+    keyword = String(keyword || '').normalize('NFKC').trim();
+    if (!keyword) return [];
     const key = 'search-persons|' + keyword + '|' + (career || '');
-    return searchLoop('/v0/search/persons', function () {
+    // Name suggestions must not wait for hundreds of fuzzy matches on later pages.
+    const list = await searchLoop('/v0/search/persons', function () {
       const body = { keyword: keyword };
       if (career) body.filter = { career: [career] };
       return body;
-    }, key, C.cacheTtl.search, force);
+    }, key, C.cacheTtl.search, force, true);
+    function name(value) { return String(value || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase(); }
+    const target = name(keyword);
+    return list.sort(function (a, b) { return Number(name(b.name) === target) - Number(name(a.name) === target); });
   }
 
   // 搜索条目，types 如 [2]（动画）

@@ -242,13 +242,13 @@
                 value: s.id
               };
             }));
-          }).catch(function () { done([]); });
+          }).catch(function (err) { done([], err.message); });
         } else {
           Staff.api.searchSubjects(kw, [p.workType]).then(function (list) {
             done(list.slice(0, 20).map(function (s) {
               return { id: s.id, label: (s.name_cn || s.name), meta: (s.date || '') + ' · ' + s.name, value: s.id };
             }));
-          }).catch(function () { done([]); });
+          }).catch(function (err) { done([], err.message); });
         }
       },
       onPick: function (item) {
